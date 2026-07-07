@@ -219,7 +219,7 @@
         </svg>
       </template>
       <div style="text-align:center; padding:8px 0;">
-        <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">2FA 验证码生成器</div>
+        <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">OTP.2FA</div>
         <div style="font-size:0.8rem; color:#8c8c8c; margin-bottom:12px;">版本 1.0.0</div>
         <div style="font-size:0.78rem; color:#595959; line-height:1.6;">
           基于时间的一次性密码 (TOTP) 桌面工具<br>

@@ -1,7 +1,7 @@
 {
   "name": "totp-desktop",
   "version": "1.0.0",
-  "description": "TOTP 2FA 验证码桌面工具 - 跨平台",
+  "description": "OTP.2FA 验证码桌面工具 - 跨平台",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -25,7 +25,7 @@
   },
   "build": {
     "appId": "com.totp.desktop",
-    "productName": "2FA 验证码生成器",
+    "productName": "OTP.2FA",
     "directories": {
       "output": "release"
     },

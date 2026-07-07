@@ -1,6 +1,7 @@
 const {
   app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen,
 } = require('electron');
+const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -13,10 +14,15 @@ const zlib = require('zlib');
 const DEV_URL = 'http://localhost:5173';
 const isDev = process.env.NODE_ENV === 'development';
 
-const DATA_DIR = app.getPath('userData');
+const DATA_DIR = path.join(os.homedir(), '.otp2fa');
 const KEYS_FILE = path.join(DATA_DIR, 'totp-keys.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'totp-config.json');
 const AVATAR_FILE = path.join(DATA_DIR, 'avatar.png');
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 function distFile(file) {
   return path.join(__dirname, '..', 'dist', file);
@@ -113,9 +119,7 @@ function getSalt() {
       if (cfg.salt) return cfg.salt;
     }
   } catch (_) {}
-  const salt = crypto.randomBytes(32).toString('hex');
-  saveConfig({ salt });
-  return salt;
+  return '';
 }
 
 function saveConfig(config) {
@@ -178,10 +182,11 @@ function addKey(name, secret) {
   const store = getStore();
   const id = crypto.randomUUID();
   const salt = getSalt();
+  const encoded = salt ? encryptSecret(secret, salt) : Buffer.from(secret).toString('base64');
   store.keys.push({
     id,
     name: name.trim(),
-    secret: encryptSecret(secret, salt),
+    secret: encoded,
     createdAt: Date.now(),
   });
   saveStore(store);
@@ -200,6 +205,9 @@ function getAllKeys() {
 
 function decodeSecret(encoded) {
   const salt = getSalt();
+  if (!salt) {
+    try { return Buffer.from(encoded, 'base64').toString('utf-8'); } catch (_) { return ''; }
+  }
   try { return decryptSecret(encoded, salt); } catch (_) { return ''; }
 }
 
@@ -277,7 +285,7 @@ function createMainWindow() {
     minWidth: 360,
     minHeight: 480,
     frame: false,
-    title: '2FA 验证码生成器',
+    title: 'OTP.2FA',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -380,7 +388,7 @@ function createTray() {
     { label: '退出', click: () => { app.isQuitting = true; app.quit(); } },
   ]);
 
-  tray.setToolTip('2FA 验证码生成器');
+  tray.setToolTip('OTP.2FA');
 
   // 左键 → 自定义弹窗；右键 → 原生菜单
   tray.on('click', () => showPopup());
@@ -417,7 +425,10 @@ ipcMain.handle('salt:save', (_, salt) => {
   const store = getStore();
   for (const key of store.keys) {
     try {
-      const oldSecret = decryptSecret(key.secret, getSalt());
+      // Try decrypting with old salt first, fall back to base64
+      let oldSecret;
+      try { oldSecret = decryptSecret(key.secret, salt); }
+      catch (_) { oldSecret = Buffer.from(key.secret, 'base64').toString('utf-8'); }
       key.secret = encryptSecret(oldSecret, salt);
     } catch (_) { /* skip */ }
   }
