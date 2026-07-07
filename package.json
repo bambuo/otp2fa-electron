@@ -1,0 +1,50 @@
+{
+  "name": "totp-desktop",
+  "version": "1.0.0",
+  "description": "TOTP 2FA 验证码桌面工具 - 跨平台",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "dev:electron": "NODE_ENV=development electron .",
+    "dev:all": "concurrently -k \"vite\" \"sleep 1.5 && NODE_ENV=development electron .\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "NODE_ENV=production electron .",
+    "pack": "vite build && electron-builder --dir",
+    "dist": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.0",
+    "concurrently": "^9.1.0",
+    "electron": "^33.4.0",
+    "electron-builder": "^25.1.0",
+    "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.totp.desktop",
+    "productName": "2FA 验证码生成器",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "build/icon.png"
+    }
+  }
+}

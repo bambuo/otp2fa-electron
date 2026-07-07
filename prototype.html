@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>2FA 验证码生成器 - 原型</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: #e8ecf1;
+  padding: 40px;
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ─── 主窗口 ─── */
+.main-window {
+  width: 420px;
+  max-height: 620px;
+  background: #f0f2f5;
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Header ─── */
+.win-header {
+  padding: 16px 16px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-icon {
+  width: 26px; height: 26px;
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.win-header .badge {
+  font-size: 0.7rem;
+  color: #8c8c8c;
+  background: #f5f5f5;
+  padding: 2px 10px;
+  border-radius: 10px;
+  margin-right: 4px;
+}
+
+/* Header action buttons */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.header-btn {
+  width: 32px; height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  display: flex; align-items: center; justify-content: center;
+  color: #8c8c8c;
+  transition: all 0.15s;
+}
+.header-btn:hover { background: #e5e8eb; color: #595959; }
+.header-btn.active { color: #1677ff; background: #e6f0ff; }
+
+/* User avatar */
+.avatar-btn {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 2px solid #e5e8eb;
+  background: linear-gradient(135deg, #e5e8eb, #d9d9d9);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem;
+  color: #8c8c8c;
+  transition: all 0.15s;
+  margin-left: 2px;
+}
+.avatar-btn:hover { border-color: #1677ff; color: #1677ff; }
+.avatar-btn.logged-in {
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  color: #fff;
+  border-color: #1677ff;
+}
+
+/* ─── Scroll body ─── */
+.win-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 10px;
+}
+.win-body::-webkit-scrollbar { width: 4px; }
+.win-body::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 2px; }
+
+.key-list {
+  padding: 8px 16px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ─── Key Card ─── */
+.key-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+  border-left: 4px solid #1677ff;
+  transition: transform 0.15s;
+}
+.key-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.card-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #595959;
+}
+.btn-del {
+  background: none; border: none; color: #d9d9d9;
+  cursor: pointer; font-size: 1rem;
+  padding: 2px 6px; border-radius: 6px;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.btn-del:hover { color: #ff4d4f; background: #fff1f0; }
+
+.card-code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.btn-copy-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: #8c8c8c;
+  transition: color 0.15s;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.btn-copy-icon:hover { color: #22c55e; }
+
+.card-code {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-family: "SF Mono", "Fira Code", "Courier New", monospace;
+  letter-spacing: 6px;
+  color: #22c55e;
+  line-height: 1;
+}
+
+.card-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.timer-track {
+  flex: 1; height: 4px;
+  background: #f0f0f0;
+  border-radius: 2px; overflow: hidden;
+}
+.timer-bar {
+  height: 100%; border-radius: 2px;
+  transition: width 1s linear;
+}
+.timer-bar.blue { background: linear-gradient(90deg, #1677ff, #4096ff); width: 73%; }
+.timer-bar.yellow { background: linear-gradient(90deg, #faad14, #ffc53d); width: 35%; }
+.timer-bar.red { background: linear-gradient(90deg, #ff4d4f, #ff7875); width: 12%; }
+
+.timer-text {
+  font-size: 0.75rem; font-weight: 500;
+  color: #8c8c8c; min-width: 28px; text-align: right;
+}
+
+.card-qr-toggle {
+  font-size: 0.75rem; color: #1677ff;
+  cursor: pointer; user-select: none; padding: 4px 0;
+}
+.card-qr {
+  overflow: hidden; max-height: 0;
+  transition: max-height 0.35s ease;
+  display: flex; justify-content: center;
+}
+.card-qr.open { max-height: 150px; padding-top: 10px; }
+
+.qr-mock {
+  width: 110px; height: 110px;
+  background: #f5f5f5;
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; color: #bfbfbf;
+}
+
+/* ─── FAB ─── */
+.fab {
+  position: absolute;
+  bottom: 20px; right: 20px;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  border: none; color: #fff;
+  font-size: 1.5rem; font-weight: 300;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(22,119,255,0.4);
+  transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 5;
+}
+.fab:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(22,119,255,0.5); }
+
+/* ─── 弹出菜单 ─── */
+.popup {
+  width: 260px;
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+
+  /* 磨砂玻璃 */
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+/* 水滴纹理 */
+.popup::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255,255,255,0.30) 0px, transparent 4px),
+    radial-gradient(circle at 80% 25%, rgba(255,255,255,0.22) 0px, transparent 3px),
+    radial-gradient(circle at 45% 60%, rgba(255,255,255,0.18) 0px, transparent 3px),
+    radial-gradient(circle at 70% 80%, rgba(255,255,255,0.25) 0px, transparent 2px),
+    radial-gradient(circle at 15% 70%, rgba(255,255,255,0.15) 0px, transparent 2px),
+    radial-gradient(circle at 90% 50%, rgba(255,255,255,0.20) 0px, transparent 2px);
+  z-index: -1;
+}
+
+.popup-item { padding: 12px 16px; position: relative; z-index: 1; }
+
+.popup-item + .popup-item {
+  border-top: 1px solid rgba(0,0,0,0.04);
+}
+.popup-item:last-child { border-bottom: none; }
+
+.popup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.popup-item .name { font-size: 0.78rem; font-weight: 500; color: #595959; }
+.popup-item .code {
+  font-size: 1.3rem; font-weight: 700;
+  font-family: "SF Mono", "Fira Code", monospace;
+  letter-spacing: 3px; color: #22c55e;
+}
+
+.popup-timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popup-timer .track {
+  flex: 1;
+  height: 3px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.popup-timer .bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+.popup-timer .bar.blue { background: linear-gradient(90deg, #1677ff, #4096ff); width: 73%; }
+.popup-timer .bar.yellow { background: linear-gradient(90deg, #faad14, #ffc53d); width: 35%; }
+.popup-timer .bar.red { background: linear-gradient(90deg, #ff4d4f, #ff7875); width: 12%; }
+
+.popup-timer .time-text { font-size: 0.6rem; color: #8c8c8c; min-width: 22px; text-align: right; }
+.popup-footer {
+  padding: 10px 16px; text-align: center;
+  border-top: 1px solid rgba(0,0,0,0.04);
+  position: relative;
+  z-index: 1;
+}
+.popup-footer button {
+  background: none; border: none;
+  font-size: 0.8rem; color: #1677ff; font-weight: 500;
+  cursor: pointer; padding: 6px 12px; border-radius: 8px;
+  transition: background 0.15s;
+}
+.popup-footer button:hover { background: rgba(22,119,255,0.08); }
+
+/* ─── 头像编辑 ─── */
+.avatar-edit {
+  position: relative;
+  width: 60px; height: 60px;
+  margin: 0 auto 4px;
+  cursor: pointer;
+}
+
+.avatar-edit .avatar-img {
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 1.3rem;
+  transition: filter 0.2s;
+  overflow: hidden;
+}
+
+.avatar-edit .avatar-img img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.avatar-edit .avatar-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #fff;
+  font-size: 1.2rem;
+}
+
+.avatar-edit:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.avatar-edit:hover .avatar-img {
+  filter: brightness(0.85);
+}
+
+.avatar-upload-hint {
+  text-align: center;
+  font-size: 0.72rem;
+  color: #8c8c8c;
+  margin-bottom: 12px;
+}
+
+/* ─── 通用弹窗 ─── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.25);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+
+.modal-box {
+  position: relative;
+  border-radius: 20px;
+  padding: 24px 22px 18px;
+  width: 340px;
+  animation: modalIn 0.25s ease;
+
+  /* 磨砂玻璃基础 */
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  /* 水滴光泽边框 */
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.12),
+    inset 0 1px 0 rgba(255,255,255,0.6);
+
+  overflow: hidden;
+}
+
+/* 水滴纹理 */
+.modal-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  pointer-events: none;
+  background:
+    /* 大水滴 - 高光 */
+    radial-gradient(circle at 18% 22%, rgba(255,255,255,0.35) 0px, transparent 4px),
+    radial-gradient(circle at 72% 15%, rgba(255,255,255,0.20) 0px, transparent 3px),
+    radial-gradient(circle at 85% 55%, rgba(255,255,255,0.25) 0px, transparent 5px),
+    radial-gradient(circle at 30% 70%, rgba(255,255,255,0.15) 0px, transparent 3px),
+    /* 小水滴 - 散点 */
+    radial-gradient(circle at 40% 35%, rgba(255,255,255,0.30) 0px, transparent 2px),
+    radial-gradient(circle at 60% 75%, rgba(255,255,255,0.18) 0px, transparent 2px),
+    radial-gradient(circle at 12% 50%, rgba(255,255,255,0.22) 0px, transparent 2px),
+    radial-gradient(circle at 50% 88%, rgba(255,255,255,0.15) 0px, transparent 2px),
+    radial-gradient(circle at 78% 35%, rgba(255,255,255,0.20) 0px, transparent 2px),
+    radial-gradient(circle at 55% 45%, rgba(255,255,255,0.12) 0px, transparent 1px),
+    radial-gradient(circle at 90% 80%, rgba(255,255,255,0.18) 0px, transparent 2px),
+    /* 细微高光条纹 */
+    linear-gradient(
+      145deg,
+      rgba(255,255,255,0.08) 0%,
+      transparent 30%,
+      transparent 70%,
+      rgba(255,255,255,0.05) 100%
+    );
+  z-index: -1;
+}
+@keyframes modalIn {
+  from { transform: scale(0.95) translateY(8px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.modal-box h2 {
+  font-size: 1.05rem; font-weight: 600;
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.modal-box label {
+  display: block;
+  font-size: 0.78rem; font-weight: 500;
+  color: #595959; margin-bottom: 4px;
+}
+.modal-box input, .modal-box textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #d9d9d9;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  outline: none;
+  margin-bottom: 14px;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+.modal-box textarea {
+  resize: vertical; min-height: 50px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.82rem;
+}
+.modal-box input:focus, .modal-box textarea:focus {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 3px rgba(22,119,255,0.1);
+}
+.modal-box .hint {
+  font-size: 0.72rem;
+  color: #8c8c8c;
+  margin-top: -8px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.modal-box .hint strong { color: #595959; }
+
+.modal-actions {
+  display: flex; gap: 10px; margin-top: 2px;
+}
+.modal-actions button {
+  flex: 1; padding: 9px; border-radius: 10px;
+  font-size: 0.85rem; font-weight: 500;
+  cursor: pointer; border: none;
+  transition: all 0.15s;
+}
+.modal-actions .cancel { background: #f5f5f5; color: #595959; }
+.modal-actions .cancel:hover { background: #ebebeb; }
+.modal-actions .confirm { background: #1677ff; color: #fff; }
+.modal-actions .confirm:hover { background: #4096ff; }
+.modal-actions .danger { background: #ff4d4f; color: #fff; }
+.modal-actions .danger:hover { background: #ff7875; }
+
+/* ─── 标签 ─── */
+.label-tag {
+  display: inline-block;
+  background: #f0f5ff; color: #1677ff;
+  font-size: 0.65rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px;
+  margin-bottom: 12px;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 主窗口 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="main-window" id="mainWindow">
+  <div class="win-header">
+      <div class="brand-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      </div>
+    <span class="badge">7 个密钥</span>
+    <div class="header-actions">
+      <button class="header-btn" title="设置" onclick="openSettings()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+      <button class="avatar-btn" title="登录" onclick="openLogin()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="win-body">
+  <div class="key-list">
+    <div class="key-card" style="border-left-color: #1677ff;">
+      <div class="card-header"><span class="card-name">GitHub</span><button class="btn-del">✕</button></div>
+      <div class="card-code-row">
+        <div class="card-code">428 392</div>
+        <button class="btn-copy-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="card-timer"><div class="timer-track"><div class="timer-bar blue"></div></div><span class="timer-text">22s</span></div>
+      <div class="card-qr-toggle">展开二维码 ▼</div>
+      <div class="card-qr"><div class="qr-mock">QR Code</div></div>
+    </div>
+    <div class="key-card" style="border-left-color: #52c41a;">
+      <div class="card-header"><span class="card-name">Google</span><button class="btn-del">✕</button></div>
+      <div class="card-code-row">
+        <div class="card-code">816 504</div>
+        <button class="btn-copy-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="card-timer"><div class="timer-track"><div class="timer-bar yellow"></div></div><span class="timer-text">10s</span></div>
+      <div class="card-qr-toggle">展开二维码 ▼</div>
+      <div class="card-qr"><div class="qr-mock">QR Code</div></div>
+    </div>
+    <div class="key-card" style="border-left-color: #faad14;">
+      <div class="card-header"><span class="card-name">Cloudflare</span><button class="btn-del">✕</button></div>
+      <div class="card-code-row">
+        <div class="card-code">193 765</div>
+        <button class="btn-copy-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="card-timer"><div class="timer-track"><div class="timer-bar red"></div></div><span class="timer-text">3s</span></div>
+      <div class="card-qr-toggle">展开二维码 ▼</div>
+      <div class="card-qr"><div class="qr-mock">QR Code</div></div>
+    </div>
+    <div class="key-card" style="border-left-color: #722ed1;">
+      <div class="card-header"><span class="card-name">Twitter / X</span><button class="btn-del">✕</button></div>
+      <div class="card-code-row">
+        <div class="card-code">670 231</div>
+        <button class="btn-copy-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="card-timer"><div class="timer-track"><div class="timer-bar blue" style="width:55%"></div></div><span class="timer-text">16s</span></div>
+      <div class="card-qr-toggle">展开二维码 ▼</div>
+      <div class="card-qr"><div class="qr-mock">QR Code</div></div>
+    </div>
+    <div class="key-card" style="border-left-color: #eb2f96;">
+      <div class="card-header"><span class="card-name">Microsoft</span><button class="btn-del">✕</button></div>
+      <div class="card-code-row">
+        <div class="card-code">345 189</div>
+        <button class="btn-copy-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="card-timer"><div class="timer-track"><div class="timer-bar blue" style="width:88%"></div></div><span class="timer-text">26s</span></div>
+      <div class="card-qr-toggle">展开二维码 ▼</div>
+      <div class="card-qr"><div class="qr-mock">QR Code</div></div>
+    </div>
+    <div class="key-card" style="border-left-color: #13c2c2;">
+      <div class="card-header"><span class="card-name">AWS</span><button class="btn-del">✕</button></div>
+      <div class="card-code-row">
+        <div class="card-code">902 547</div>
+        <button class="btn-copy-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="card-timer"><div class="timer-track"><div class="timer-bar yellow" style="width:30%"></div></div><span class="timer-text">9s</span></div>
+      <div class="card-qr-toggle">展开二维码 ▼</div>
+      <div class="card-qr"><div class="qr-mock">QR Code</div></div>
+    </div>
+    <div class="key-card" style="border-left-color: #fa541c;">
+      <div class="card-header"><span class="card-name">Binance</span><button class="btn-del">✕</button></div>
+      <div class="card-code-row">
+        <div class="card-code">511 836</div>
+        <button class="btn-copy-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="card-timer"><div class="timer-track"><div class="timer-bar red" style="width:8%"></div></div><span class="timer-text">2s</span></div>
+      <div class="card-qr-toggle">展开二维码 ▼</div>
+      <div class="card-qr"><div class="qr-mock">QR Code</div></div>
+    </div>
+  </div>
+  </div>
+
+  <button class="fab">+</button>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 托盘弹出菜单 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div>
+  <div class="label-tag">托盘弹出菜单 (最多 3 条)</div>
+  <div class="popup">
+    <div class="popup-item">
+      <div class="popup-row">
+        <span class="name">GitHub</span>
+        <span class="code">428 392</span>
+      </div>
+      <div class="popup-timer">
+        <div class="track"><div class="bar blue"></div></div>
+        <span class="time-text">22s</span>
+      </div>
+    </div>
+    <div class="popup-item">
+      <div class="popup-row">
+        <span class="name">Google</span>
+        <span class="code">816 504</span>
+      </div>
+      <div class="popup-timer">
+        <div class="track"><div class="bar yellow"></div></div>
+        <span class="time-text">10s</span>
+      </div>
+    </div>
+    <div class="popup-item">
+      <div class="popup-row">
+        <span class="name">Cloudflare</span>
+        <span class="code">193 765</span>
+      </div>
+      <div class="popup-timer">
+        <div class="track"><div class="bar red"></div></div>
+        <span class="time-text">3s</span>
+      </div>
+    </div>
+    <div class="popup-footer">
+      <button>打开主窗口</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 添加密钥弹窗 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div>
+  <div class="label-tag" style="margin-top:20px;">添加密钥弹窗</div>
+  <div class="modal-overlay" style="position:relative; background:transparent; backdrop-filter:none; height:auto;">
+    <div class="modal-box">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5M20 7l-3-3"></path></svg> 添加密钥</h2>
+      <label>名称</label>
+      <input type="text" placeholder="例如: GitHub" value="GitHub" />
+      <label>密钥 (Base32)</label>
+      <input type="text" placeholder="例如: 5NCZCPKP66WZQYNT" value="5NCZCPKP66WZQYNT" />
+      <div class="modal-actions">
+        <button class="cancel">取消</button>
+        <button class="confirm">确认</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 设置弹窗 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div>
+  <div class="label-tag" style="margin-top:20px;">设置弹窗 (点击 ⚙️ 打开)</div>
+  <div class="modal-overlay" id="settingsModal" style="position:relative; background:transparent; backdrop-filter:none; height:auto;">
+    <div class="modal-box">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> 设置</h2>
+
+      <label>本地加密盐 (Salt)</label>
+      <textarea id="saltInput" rows="2" placeholder="输入你的盐值，用于本地加密密钥">a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6</textarea>
+      <div class="hint">
+        <strong>盐的作用：</strong>密钥在本地保存时，会用盐值进行加密后再写入文件。
+        即使密钥文件被泄露，没有盐也无法还原。<br>
+        <strong>⚠️ 盐仅保存在本机，不会上传到服务器。</strong> 更换设备时需手动迁移。
+      </div>
+
+      <div class="modal-actions">
+        <button class="cancel">取消</button>
+        <button class="confirm">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 登录弹窗 - 未登录 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div>
+  <div class="label-tag" style="margin-top:20px;">登录弹窗 - 未登录状态</div>
+  <div class="modal-overlay" style="position:relative; background:transparent; backdrop-filter:none; height:auto;">
+    <div class="modal-box">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> 账号</h2>
+      <label>邮箱</label>
+      <input type="email" placeholder="you@example.com" />
+      <label>密码</label>
+      <input type="password" placeholder="输入密码" />
+      <div class="hint">
+        登录后可将密钥同步到云端，多设备共享。
+        本地盐值不会上传，云端密钥需配合本地盐使用。
+      </div>
+      <div class="modal-actions">
+        <button class="cancel">取消</button>
+        <button class="confirm">登录</button>
+      </div>
+      <div style="text-align:center; margin-top:12px;">
+        <span style="font-size:0.75rem; color:#8c8c8c; cursor:pointer;">还没有账号？注册</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 登录弹窗 - 已登录 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div>
+  <div class="label-tag" style="margin-top:20px;">登录弹窗 - 已登录状态</div>
+  <div class="modal-overlay" style="position:relative; background:transparent; backdrop-filter:none; height:auto;">
+    <div class="modal-box">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> 账号</h2>
+      <div style="text-align:center; padding:4px 0 12px;">
+
+        <!-- 可点击更换的头像 -->
+        <div class="avatar-edit" onclick="document.getElementById('avatarInput2').click()">
+          <div class="avatar-img" id="avatarPreview2">U</div>
+          <div class="avatar-overlay">📷</div>
+        </div>
+        <input type="file" id="avatarInput2" accept="image/*" style="display:none" onchange="previewAvatar2(event)">
+        <div class="avatar-upload-hint">点击头像更换图片</div>
+
+        <div style="font-weight:600;font-size:0.9rem;">user@example.com</div>
+        <div style="font-size:0.75rem;color:#8c8c8c; margin-top:2px;">已登录 · 同步已开启</div>
+
+        <div style="margin-top:14px; display:flex; gap:8px; justify-content:center;">
+          <span style="font-size:0.75rem; color:#1677ff; cursor:pointer;">修改密码</span>
+          <span style="font-size:0.75rem; color:#d9d9d9;">|</span>
+          <span style="font-size:0.75rem; color:#ff4d4f; cursor:pointer;">退出登录</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 注册弹窗 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div>
+  <div class="label-tag" style="margin-top:20px;">注册弹窗 (点击「还没有账号？注册」)</div>
+  <div class="modal-overlay" style="position:relative; background:transparent; backdrop-filter:none; height:auto;">
+    <div class="modal-box">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg> 注册</h2>
+      <label>邮箱</label>
+      <input type="email" placeholder="you@example.com" />
+      <label>密码</label>
+      <input type="password" placeholder="至少 8 位密码" />
+      <label>确认密码</label>
+      <input type="password" placeholder="再次输入密码" />
+      <div class="hint">
+        注册后可跨设备同步密钥。本地盐值始终保留在本机，不上传服务器。
+      </div>
+      <div class="modal-actions">
+        <button class="cancel">取消</button>
+        <button class="confirm">注册</button>
+      </div>
+      <div style="text-align:center; margin-top:12px;">
+        <span style="font-size:0.75rem; color:#8c8c8c; cursor:pointer;">已有账号？登录</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ 修改密码弹窗 ═══ -->
+<!-- ═══════════════════════════════════════════ -->
+<div>
+  <div class="label-tag" style="margin-top:20px;">修改密码弹窗 (点击「修改密码」)</div>
+  <div class="modal-overlay" style="position:relative; background:transparent; backdrop-filter:none; height:auto;">
+    <div class="modal-box">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> 修改密码</h2>
+      <label>当前密码</label>
+      <input type="password" placeholder="输入当前密码" />
+      <label>新密码</label>
+      <input type="password" placeholder="至少 8 位新密码" />
+      <label>确认新密码</label>
+      <input type="password" placeholder="再次输入新密码" />
+      <div class="modal-actions">
+        <button class="cancel">取消</button>
+        <button class="confirm">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+<script>
+// ─── Toggle QR ───
+document.querySelectorAll('.card-qr-toggle').forEach(el => {
+  el.addEventListener('click', () => {
+    const qr = el.nextElementSibling;
+    qr.classList.toggle('open');
+    el.textContent = qr.classList.contains('open') ? '收起二维码 ▲' : '展开二维码 ▼';
+  });
+});
+
+// ─── Avatar preview ───
+function previewAvatar(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const preview = document.getElementById('avatarPreview');
+    preview.innerHTML = `<img src="${ev.target.result}" alt="avatar">`;
+    preview.style.background = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function previewAvatar2(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const preview = document.getElementById('avatarPreview2');
+    preview.innerHTML = `<img src="${ev.target.result}" alt="avatar">`;
+    preview.style.background = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ─── Open/close modals (prototype only) ───
+function openSettings() { alert('设置弹窗 - 见下方预览区域'); }
+function openLogin() { alert('登录弹窗 - 见下方预览区域'); }
+</script>
+</html>
