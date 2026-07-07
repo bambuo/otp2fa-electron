@@ -448,8 +448,12 @@ ipcMain.handle('dock:get', () => getDockHide());
 ipcMain.handle('dock:set', (_, hide) => {
   saveConfig({ hideDock: !!hide });
   if (process.platform === 'darwin') {
-    if (hide) app.dock.hide();
-    else app.dock.show();
+    if (hide) {
+      app.setActivationPolicy('accessory');
+    } else {
+      app.setActivationPolicy('regular');
+      app.dock.show();
+    }
   }
 });
 
@@ -461,6 +465,10 @@ app.isQuitting = false;
 app.on('before-quit', () => { app.isQuitting = true; });
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin') {
+    app.setActivationPolicy('accessory');
+  }
+  Menu.setApplicationMenu(null);
   createTray();
   if (process.platform === 'darwin' && getDockHide()) {
     app.dock.hide();
