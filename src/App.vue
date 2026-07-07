@@ -9,6 +9,19 @@
         </div>
         <span class="badge">{{ keys.length }} 个密钥</span>
         <div class="header-actions">
+          <div class="menu-wrapper">
+            <button class="header-btn" title="更多" @click="toggleMenu">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="1"></circle>
+                <circle cx="19" cy="12" r="1"></circle>
+                <circle cx="5" cy="12" r="1"></circle>
+              </svg>
+            </button>
+            <div v-if="menuOpen" class="dropdown" @click.self="menuOpen = false">
+              <div class="dropdown-item" @click="openAbout">关于</div>
+              <div class="dropdown-item" @click="openFeedback">反馈</div>
+            </div>
+          </div>
           <button class="header-btn" title="设置" @click="showSettings = true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
@@ -195,6 +208,44 @@
         <button class="btn-confirm" @click="showChangePass = false">保存</button>
       </div>
     </Modal>
+
+    <!-- About -->
+    <Modal v-if="showAbout" title="关于" @close="showAbout = false">
+      <template #icon>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+      </template>
+      <div style="text-align:center; padding:8px 0;">
+        <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">2FA 验证码生成器</div>
+        <div style="font-size:0.8rem; color:#8c8c8c; margin-bottom:12px;">版本 1.0.0</div>
+        <div style="font-size:0.78rem; color:#595959; line-height:1.6;">
+          基于时间的一次性密码 (TOTP) 桌面工具<br>
+          使用 Electron + Vue 3 构建<br>
+          支持 Windows / macOS / Linux
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Feedback -->
+    <Modal v-if="showFeedback" title="反馈" @close="showFeedback = false">
+      <template #icon>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </template>
+      <div style="text-align:center; padding:8px 0;">
+        <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">反馈与建议</div>
+        <div style="font-size:0.8rem; color:#8c8c8c; margin-bottom:14px; line-height:1.6;">
+          如果你遇到问题或有功能建议，请通过以下方式联系我们
+        </div>
+        <div style="font-size:0.82rem; color:#1677ff; margin-bottom:6px; cursor:pointer;" onclick="window.api?.openMain?.()">
+          GitHub Issues
+        </div>
+      </div>
+    </Modal>
   </div>
 
   <transition name="toast-fade">
@@ -225,6 +276,7 @@ export default {
       saltValue: '',
       saltError: '',
       hideDock: true,
+      menuOpen: false,
       toastMsg: '',
       toastVisible: false,
       _toastTimer: null,
@@ -247,6 +299,8 @@ export default {
       changeOld: '',
       changeNew: '',
       changeNew2: '',
+      showAbout: false,
+      showFeedback: false,
     }
   },
 
@@ -274,6 +328,26 @@ export default {
       this.toastVisible = true
       clearTimeout(this._toastTimer)
       this._toastTimer = setTimeout(() => { this.toastVisible = false }, 2000)
+    },
+
+    toggleMenu() {
+      this.menuOpen = !this.menuOpen
+      if (this.menuOpen) {
+        setTimeout(() => {
+          const close = (e) => { this.menuOpen = false; document.removeEventListener('click', close) }
+          document.addEventListener('click', close)
+        }, 0)
+      }
+    },
+
+    openAbout() {
+      this.menuOpen = false
+      this.showAbout = true
+    },
+
+    openFeedback() {
+      this.menuOpen = false
+      this.showFeedback = true
     },
 
     async loadData() {
@@ -447,6 +521,56 @@ body {
   align-items: center;
   gap: 2px;
   margin-left: auto;
+}
+
+.menu-wrapper {
+  position: relative;
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  border: 1px solid #f0f0f0;
+  min-width: 100px;
+  z-index: 50;
+  overflow: visible;
+}
+
+.dropdown::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  margin-left: -4px;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-left: 1px solid #f0f0f0;
+  border-top: 1px solid #f0f0f0;
+  transform: rotate(45deg);
+}
+
+.dropdown-item {
+  padding: 9px 16px;
+  font-size: 0.82rem;
+  color: #595959;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.dropdown-item:hover {
+  background: #f5f5f5;
+  color: #1677ff;
+}
+
+.dropdown-item + .dropdown-item {
+  border-top: 1px solid #f0f0f0;
 }
 
 .brand-icon {
