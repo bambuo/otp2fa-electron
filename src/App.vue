@@ -99,7 +99,15 @@
         </svg>
       </template>
       <label>本地加密盐 (Salt)</label>
-      <textarea v-model="saltValue" rows="2" placeholder="32位以上十六进制字符串"></textarea>
+      <div class="salt-row">
+        <textarea v-model="saltValue" rows="2" placeholder="32位以上十六进制字符串"></textarea>
+        <button class="btn-gen" @click="generateSalt" title="随机生成">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+        </button>
+      </div>
       <div class="hint">
         <strong>盐的作用：</strong>密钥用 AES-256-GCM 加密后保存。即使文件泄露，没有 salt 也无法还原。<br />
         <strong>⚠️ 盐仅保存在本机，不会上传。</strong> 更换设备时需手动迁移。
@@ -415,6 +423,12 @@ export default {
 
     async loadDockPref() {
       try { this.hideDock = await window.api.getDockHide() } catch (_) {}
+    },
+
+    generateSalt() {
+      let s = '';
+      for (let i = 0; i < 64; i++) s += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+      this.saltValue = s;
     },
 
     // Avatar
@@ -748,6 +762,32 @@ body {
   resize: vertical; min-height: 50px;
   font-family: "SF Mono", "Fira Code", monospace;
   font-size: 0.82rem;
+}
+
+.salt-row {
+  position: relative;
+}
+
+.salt-row textarea {
+  width: 100%;
+}
+
+.btn-gen {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #8c8c8c;
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+  z-index: 1;
+}
+.btn-gen:hover {
+  color: #1677ff;
 }
 
 .modal-box input:focus, .modal-box textarea:focus {
