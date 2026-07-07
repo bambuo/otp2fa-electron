@@ -266,6 +266,7 @@ function createMainWindow() {
     height: 680,
     minWidth: 360,
     minHeight: 480,
+    frame: false,
     title: '2FA 验证码生成器',
     show: false,
     webPreferences: {
@@ -429,6 +430,9 @@ ipcMain.handle('avatar:get', () => {
 });
 
 ipcMain.handle('main:open', () => createMainWindow());
+
+ipcMain.handle('win:minimize', () => mainWindow?.minimize());
+ipcMain.handle('win:close', () => { if (mainWindow) mainWindow.close(); });
 
 // ═══════════════════════════════════════════════════
 //  App Lifecycle

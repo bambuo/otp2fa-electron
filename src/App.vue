@@ -1,28 +1,37 @@
 <template>
   <div class="app">
-    <!-- Header -->
-    <div class="header">
+    <div class="titlebar">
+      <div class="titlebar-drag">
         <div class="brand-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
           </svg>
         </div>
-      <div class="header-right">
         <span class="badge">{{ keys.length }} 个密钥</span>
-        <button class="header-btn" title="设置" @click="showSettings = true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
+        <div class="header-actions">
+          <button class="header-btn" title="设置" @click="showSettings = true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+          <button class="avatar-btn" :class="{ logged: avatarData }" title="账号" @click="showLogin = true">
+            <template v-if="avatarData">
+              <img :src="avatarData" alt="avatar" class="avatar-thumb" />
+            </template>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="titlebar-controls">
+        <button class="ctl-btn" @click="minimizeWin" title="最小化">
+          <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
         </button>
-        <button class="avatar-btn" :class="{ logged: avatarData }" title="账号" @click="showLogin = true">
-          <template v-if="avatarData">
-            <img :src="avatarData" alt="avatar" class="avatar-thumb" />
-          </template>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-          </svg>
+        <button class="ctl-btn ctl-close" @click="closeWin" title="关闭">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5"/></svg>
         </button>
       </div>
     </div>
@@ -236,6 +245,9 @@ export default {
   },
 
   methods: {
+    minimizeWin() { window.api.minimize() },
+    closeWin() { window.api.close() },
+
     async loadData() {
       try {
         this.keys = await window.api.getKeys()
@@ -354,13 +366,51 @@ body {
   max-height: 100vh;
 }
 
-/* ═══════════════════════════════ Header */
-.header {
-  padding: 16px 16px 8px;
+/* ─── Titlebar ─── */
+.titlebar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.titlebar-drag {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  padding: 12px 8px 6px 16px;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 12px 12px 6px 0;
+  -webkit-app-region: no-drag;
+}
+
+.ctl-btn {
+  width: 36px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8c8c8c;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.ctl-btn:hover { background: #e5e8eb; color: #595959; }
+.ctl-close:hover { background: #ff4d4f; color: #fff; }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 
 .brand-icon {
@@ -389,19 +439,21 @@ body {
   border-radius: 8px; cursor: pointer; font-size: 1.1rem;
   display: flex; align-items: center; justify-content: center;
   color: #8c8c8c; transition: all 0.15s;
+  -webkit-app-region: no-drag;
 }
 .header-btn:hover { background: #e5e8eb; color: #595959; }
 
 .avatar-btn {
   width: 30px; height: 30px; border-radius: 50%;
-  border: 2px solid #e5e8eb; cursor: pointer;
+  border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   font-size: 0.8rem; color: #8c8c8c;
   transition: all 0.15s; overflow: hidden; margin-left: 2px;
-  background: linear-gradient(135deg, #e5e8eb, #d9d9d9);
+  background: none;
+  -webkit-app-region: no-drag;
 }
-.avatar-btn:hover { border-color: #1677ff; color: #1677ff; }
-.avatar-btn.logged { border-color: #1677ff; }
+.avatar-btn:hover { color: #1677ff; background: rgba(22,119,255,0.06); }
+.avatar-btn.logged { }
 
 .avatar-thumb {
   width: 100%; height: 100%; object-fit: cover;
