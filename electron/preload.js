@@ -14,4 +14,6 @@ contextBridge.exposeInMainWorld('api', {
   openMain: () => ipcRenderer.invoke('main:open'),
   minimize: () => ipcRenderer.invoke('win:minimize'),
   close: () => ipcRenderer.invoke('win:close'),
+  getDockHide: () => ipcRenderer.invoke('dock:get'),
+  setDockHide: (hide) => ipcRenderer.invoke('dock:set', hide),
 });

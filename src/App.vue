@@ -15,7 +15,7 @@
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
           </button>
-          <button class="avatar-btn" :class="{ logged: avatarData }" title="账号" @click="showLogin = true">
+          <button class="avatar-btn disabled" title="账号 (开发中)" @click="showToast('登录功能开发中')">
             <template v-if="avatarData">
               <img :src="avatarData" alt="avatar" class="avatar-thumb" />
             </template>
@@ -39,7 +39,11 @@
     <!-- Key List -->
     <div class="body-scroll">
       <div v-if="keys.length === 0" class="empty">
-        <div class="empty-icon">🔐</div>
+        <div class="empty-icon">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+        </div>
         <p>暂无密钥，点击右下角 + 添加</p>
       </div>
       <div v-else class="card-list">
@@ -87,6 +91,15 @@
         <strong>盐的作用：</strong>密钥用 AES-256-GCM 加密后保存。即使文件泄露，没有 salt 也无法还原。<br />
         <strong>⚠️ 盐仅保存在本机，不会上传。</strong> 更换设备时需手动迁移。
       </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">隐藏 Dock 图标</span>
+        <label class="toggle-switch">
+          <input type="checkbox" v-model="hideDock" @change="toggleDock" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
       <div v-if="saltError" class="err">{{ saltError }}</div>
       <div class="modal-actions">
         <button class="btn-cancel" @click="showSettings = false">取消</button>
@@ -183,6 +196,10 @@
       </div>
     </Modal>
   </div>
+
+  <transition name="toast-fade">
+    <div v-if="toastVisible" class="toast">{{ toastMsg }}</div>
+  </transition>
 </template>
 
 <script>
@@ -207,6 +224,10 @@ export default {
       showSettings: false,
       saltValue: '',
       saltError: '',
+      hideDock: true,
+      toastMsg: '',
+      toastVisible: false,
+      _toastTimer: null,
 
       // Login / Account
       showLogin: false,
@@ -247,6 +268,13 @@ export default {
   methods: {
     minimizeWin() { window.api.minimize() },
     closeWin() { window.api.close() },
+
+    showToast(msg) {
+      this.toastMsg = msg
+      this.toastVisible = true
+      clearTimeout(this._toastTimer)
+      this._toastTimer = setTimeout(() => { this.toastVisible = false }, 2000)
+    },
 
     async loadData() {
       try {
@@ -307,6 +335,14 @@ export default {
       } catch (_) {}
     },
 
+    async toggleDock() {
+      try { await window.api.setDockHide(this.hideDock) } catch (_) {}
+    },
+
+    async loadDockPref() {
+      try { this.hideDock = await window.api.getDockHide() } catch (_) {}
+    },
+
     // Avatar
     triggerAvatarInput() {
       this.$refs.avatarInput?.click()
@@ -341,7 +377,7 @@ export default {
 
   watch: {
     showSettings(v) {
-      if (v) this.loadSalt()
+      if (v) { this.loadSalt(); this.loadDockPref(); }
     },
   },
 }
@@ -453,6 +489,8 @@ body {
   -webkit-app-region: no-drag;
 }
 .avatar-btn:hover { color: #1677ff; background: rgba(22,119,255,0.06); }
+.avatar-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.avatar-btn.disabled:hover { color: #8c8c8c; background: none; }
 .avatar-btn.logged { }
 
 .avatar-thumb {
@@ -479,7 +517,7 @@ body {
 .empty {
   text-align: center; padding: 60px 20px; color: #bfbfbf;
 }
-.empty-icon { font-size: 2.6rem; margin-bottom: 10px; }
+.empty-icon { font-size: 2.6rem; margin-bottom: 10px; display: flex; justify-content: center; }
 .empty p { font-size: 0.85rem; }
 
 /* ═══════════════════════════════ FAB */
@@ -613,6 +651,55 @@ body {
   z-index: 1;
 }
 
+/* Toggle switch */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.toggle-label {
+  font-size: 0.82rem;
+  color: #595959;
+  font-weight: 500;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.toggle-switch input { display: none; }
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #d9d9d9;
+  border-radius: 11px;
+  transition: 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 2px;
+  bottom: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.toggle-switch input:checked + .toggle-slider { background: #1677ff; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+
 .modal-actions {
   display: flex; gap: 10px; margin-top: 2px;
   position: relative;
@@ -693,4 +780,30 @@ body {
 .avatar-links span { cursor: pointer; color: #1677ff; }
 .avatar-links .sep { color: #d9d9d9; cursor: default; }
 .avatar-links .logout { color: #ff4d4f; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1677ff;
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(22,119,255,0.3);
+  z-index: 200;
+  white-space: nowrap;
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: opacity 0.3s, transform 0.3s;
+}
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
+}
 </style>

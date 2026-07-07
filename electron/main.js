@@ -128,6 +128,16 @@ function saveConfig(config) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2), 'utf-8');
 }
 
+function getDockHide() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+      if (typeof cfg.hideDock === 'boolean') return cfg.hideDock;
+    }
+  } catch (_) {}
+  return true; // 默认隐藏
+}
+
 function encryptSecret(plaintext, salt) {
   const key = crypto.scryptSync(salt, 'totp-salt', 32);
   const iv = crypto.randomBytes(16);
@@ -434,6 +444,15 @@ ipcMain.handle('main:open', () => createMainWindow());
 ipcMain.handle('win:minimize', () => mainWindow?.minimize());
 ipcMain.handle('win:close', () => { if (mainWindow) mainWindow.close(); });
 
+ipcMain.handle('dock:get', () => getDockHide());
+ipcMain.handle('dock:set', (_, hide) => {
+  saveConfig({ hideDock: !!hide });
+  if (process.platform === 'darwin') {
+    if (hide) app.dock.hide();
+    else app.dock.show();
+  }
+});
+
 // ═══════════════════════════════════════════════════
 //  App Lifecycle
 // ═══════════════════════════════════════════════════
@@ -443,11 +462,8 @@ app.on('before-quit', () => { app.isQuitting = true; });
 
 app.whenReady().then(() => {
   createTray();
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(createAppIcon());
-    app.dock.setMenu(Menu.buildFromTemplate([
-      { label: '打开主窗口', click: createMainWindow },
-    ]));
+  if (process.platform === 'darwin' && getDockHide()) {
+    app.dock.hide();
   }
 });
 
