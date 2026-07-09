@@ -1,89 +1,88 @@
-const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 
 const BUILD = path.join(__dirname, '..', 'build');
+const SOURCE_ICON = path.join(__dirname, '..', 'electron', 'assets', 'TOTP.png');
+fs.mkdirSync(BUILD, { recursive: true });
 
-function crc32(buf) {
-  let crc = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) {
-    crc ^= buf[i];
-    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+function resizePng(size, outFile) {
+  execFileSync('sips', ['-z', String(size), String(size), SOURCE_ICON, '--out', outFile], { stdio: 'pipe' });
+  return fs.readFileSync(outFile);
 }
 
-function pngChunk(type, data) {
-  const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0);
-  const t = Buffer.from(type, 'ascii');
-  const crcData = Buffer.concat([t, data]);
-  const csum = Buffer.alloc(4); csum.writeUInt32BE(crc32(crcData), 0);
-  return Buffer.concat([len, t, data, csum]);
+function makeIco(png) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(1, 4);
+
+  const entry = Buffer.alloc(16);
+  entry[0] = 0;
+  entry[1] = 0;
+  entry[2] = 0;
+  entry[3] = 0;
+  entry.writeUInt16LE(1, 4);
+  entry.writeUInt16LE(32, 6);
+  entry.writeUInt32LE(png.length, 8);
+  entry.writeUInt32LE(header.length + entry.length, 12);
+
+  return Buffer.concat([header, entry, png]);
 }
 
-function makePNG(w, h, rgba) {
-  const raw = Buffer.alloc(h * (1 + w * 4));
-  for (let y = 0; y < h; y++) {
-    raw[y * (1 + w * 4)] = 0;
-    for (let x = 0; x < w; x++) {
-      const si = (y * w + x) * 4, di = y * (1 + w * 4) + 1 + x * 4;
-      raw[di] = rgba[si]; raw[di+1] = rgba[si+1];
-      raw[di+2] = rgba[si+2]; raw[di+3] = rgba[si+3];
-    }
-  }
-  const compressed = zlib.deflateSync(raw);
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8; ihdr[9] = 6;
-  return Buffer.concat([
-    Buffer.from([137,80,78,71,13,10,26,10]),
-    pngChunk('IHDR', ihdr),
-    pngChunk('IDAT', compressed),
-    pngChunk('IEND', Buffer.alloc(0)),
-  ]);
+function icnsEntry(type, png) {
+  const header = Buffer.alloc(8);
+  header.write(type, 0, 4, 'ascii');
+  header.writeUInt32BE(png.length + 8, 4);
+  return Buffer.concat([header, png]);
 }
 
-function genIcon(size) {
-  const cx = size/2, cy = size/2, r = cx - size*0.04;
-  const rgba = Buffer.alloc(size * size * 4, 0);
-  for (let y = 0; y < size; y++)
-    for (let x = 0; x < size; x++) {
-      const d = Math.hypot(x - cx + 0.5, y - cy + 0.5), i = (y * size + x) * 4;
-      if (d <= r) {
-        rgba[i]=0x16; rgba[i+1]=0x77; rgba[i+2]=0xff; rgba[i+3]=255;
-      } else if (d <= r+2) {
-        const a = Math.round(Math.max(0, Math.min(255, (1-(d-r))*255)));
-        rgba[i]=0x16; rgba[i+1]=0x77; rgba[i+2]=0xff; rgba[i+3]=a;
-      }
-    }
-  return makePNG(size, size, rgba);
+function makeIcns() {
+  const entries = [
+    icnsEntry('icp4', fs.readFileSync(path.join(iconsetDir, 'icon_16x16.png'))),
+    icnsEntry('icp5', fs.readFileSync(path.join(iconsetDir, 'icon_32x32.png'))),
+    icnsEntry('icp6', fs.readFileSync(path.join(iconsetDir, 'icon_32x32@2x.png'))),
+    icnsEntry('ic07', fs.readFileSync(path.join(iconsetDir, 'icon_128x128.png'))),
+    icnsEntry('ic08', fs.readFileSync(path.join(iconsetDir, 'icon_256x256.png'))),
+    icnsEntry('ic09', fs.readFileSync(path.join(iconsetDir, 'icon_512x512.png'))),
+    icnsEntry('ic10', fs.readFileSync(path.join(iconsetDir, 'icon_512x512@2x.png'))),
+  ];
+  const body = Buffer.concat(entries);
+  const header = Buffer.alloc(8);
+  header.write('icns', 0, 4, 'ascii');
+  header.writeUInt32BE(body.length + 8, 4);
+  return Buffer.concat([header, body]);
+}
+
+if (!fs.existsSync(SOURCE_ICON)) {
+  throw new Error(`Missing source icon: ${SOURCE_ICON}`);
 }
 
 // Generate PNGs for Linux
-fs.writeFileSync(path.join(BUILD, 'icon.png'), genIcon(512));
+resizePng(512, path.join(BUILD, 'icon.png'));
 console.log('✓ icon.png (512x512)');
+fs.writeFileSync(path.join(BUILD, 'icon.ico'), makeIco(resizePng(256, path.join(BUILD, 'icon-256.png'))));
+console.log('✓ icon.ico (256x256)');
 
 // Generate iconset for macOS .icns
 const iconsetDir = path.join(BUILD, 'OTP.2FA.iconset');
 fs.rmSync(iconsetDir, { recursive: true, force: true });
 fs.mkdirSync(iconsetDir, { recursive: true });
 
-const sizes = [16, 32, 64, 128, 256, 512];
+const sizes = [16, 32, 128, 256, 512];
 for (const s of sizes) {
-  fs.writeFileSync(path.join(iconsetDir, `icon_${s}x${s}.png`), s <= 256 ? genIcon(s) : genIcon(s));
-  if (s <= 256) fs.writeFileSync(path.join(iconsetDir, `icon_${s}x${s}@2x.png`), genIcon(s * 2));
+  resizePng(s, path.join(iconsetDir, `icon_${s}x${s}.png`));
+  resizePng(s * 2, path.join(iconsetDir, `icon_${s}x${s}@2x.png`));
 }
 console.log('✓ iconset generated');
 
-// Convert to .icns using macOS iconutil (macOS only)
+// Convert to .icns using macOS iconutil when available, with a local writer fallback.
 try {
   execSync(`iconutil -c icns "${iconsetDir}" -o "${path.join(BUILD, 'icon.icns')}"`, { stdio: 'pipe' });
   console.log('✓ icon.icns created');
 } catch (e) {
-  console.log('⚠ icon.icns requires macOS iconutil (run on macOS)');
+  fs.writeFileSync(path.join(BUILD, 'icon.icns'), makeIcns());
+  console.log('✓ icon.icns created');
 }
 
-// Generate .ico placeholder (electron-builder can use png-pngs or rely on conversion)
-console.log('✓ icon.png ready (Windows electron-builder will auto-convert)');
 console.log('\nDone! Run: npm run dist');

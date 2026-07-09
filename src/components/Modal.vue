@@ -1,6 +1,33 @@
+<script setup>
+import { onMounted, onUnmounted } from 'vue';
+
+defineProps({
+  title: {
+    type: String,
+    required: true,
+  },
+});
+
+const emit = defineEmits(['close']);
+
+function handleKeydown(event) {
+  if (event.key === 'Escape') {
+    emit('close');
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown);
+});
+</script>
+
 <template>
   <teleport to="body">
-    <div class="modal-overlay" @click.self="$emit('close')">
+    <div class="modal-overlay" @click.self="emit('close')">
       <div class="modal-box">
         <h2>
           <slot name="icon"></slot>
@@ -11,20 +38,3 @@
     </div>
   </teleport>
 </template>
-
-<script>
-export default {
-  props: { title: String },
-  emits: ['close'],
-
-  mounted() {
-    const handler = (e) => { if (e.key === 'Escape') this.$emit('close') }
-    document.addEventListener('keydown', handler)
-    this._escHandler = handler
-  },
-
-  beforeUnmount() {
-    document.removeEventListener('keydown', this._escHandler)
-  },
-}
-</script>

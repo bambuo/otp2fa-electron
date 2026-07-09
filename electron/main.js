@@ -1,11 +1,11 @@
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen,
+  app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, safeStorage,
 } = require('electron');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const zlib = require('zlib');
+const { createQrDataUrl } = require('./qr');
 
 // ═══════════════════════════════════════════════════
 //  Paths
@@ -15,9 +15,8 @@ const DEV_URL = 'http://localhost:5173';
 const isDev = process.env.NODE_ENV === 'development';
 
 const DATA_DIR = path.join(os.homedir(), '.otp2fa');
-const KEYS_FILE = path.join(DATA_DIR, 'totp-keys.json');
-const CONFIG_FILE = path.join(DATA_DIR, 'totp-config.json');
-const AVATAR_FILE = path.join(DATA_DIR, 'avatar.png');
+const DATA_FILE = path.join(DATA_DIR, 'data.json');
+const ICON_FILE = path.join(__dirname, 'assets', 'TOTP.png');
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -28,121 +27,84 @@ function distFile(file) {
   return path.join(__dirname, '..', 'dist', file);
 }
 
-// ═══════════════════════════════════════════════════
-//  PNG Icon Generator
-// ═══════════════════════════════════════════════════
-
-function crc32(buf) {
-  let crc = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) {
-    crc ^= buf[i];
-    for (let j = 0; j < 8; j++)
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function pngChunk(type, data) {
-  const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0);
-  const t = Buffer.from(type, 'ascii');
-  const crcData = Buffer.concat([t, data]);
-  const csum = Buffer.alloc(4); csum.writeUInt32BE(crc32(crcData), 0);
-  return Buffer.concat([len, t, data, csum]);
-}
-
-function makeIcon(w, h, rgba) {
-  const raw = Buffer.alloc(h * (1 + w * 4));
-  for (let y = 0; y < h; y++) {
-    raw[y * (1 + w * 4)] = 0;
-    for (let x = 0; x < w; x++) {
-      const si = (y * w + x) * 4, di = y * (1 + w * 4) + 1 + x * 4;
-      raw[di] = rgba[si]; raw[di+1] = rgba[si+1];
-      raw[di+2] = rgba[si+2]; raw[di+3] = rgba[si+3];
-    }
-  }
-  const compressed = zlib.deflateSync(raw);
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8; ihdr[9] = 6;
-  return Buffer.concat([
-    Buffer.from([137,80,78,71,13,10,26,10]),
-    pngChunk('IHDR', ihdr),
-    pngChunk('IDAT', compressed),
-    pngChunk('IEND', Buffer.alloc(0)),
-  ]);
-}
-
 function createTrayIcon() {
-  const s = 24, cx = s/2, cy = s/2, r = cx - 2;
-  const rgba = Buffer.alloc(s * s * 4, 0);
-  for (let y = 0; y < s; y++)
-    for (let x = 0; x < s; x++) {
-      const d = Math.hypot(x - cx + 0.5, y - cy + 0.5), i = (y * s + x) * 4;
-      if (d <= r) {
-        rgba[i]=0x16; rgba[i+1]=0x77; rgba[i+2]=0xff; rgba[i+3]=255;
-      } else if (d <= r+0.8) {
-        const a = Math.round((1-(d-r))*255);
-        rgba[i]=0x16; rgba[i+1]=0x77; rgba[i+2]=0xff; rgba[i+3]=a;
-      }
-    }
-  const png = makeIcon(s, s, rgba);
-  const img = nativeImage.createFromBuffer(png, { width: s, height: s });
+  const size = process.platform === 'darwin' ? 18 : 24;
+  const img = nativeImage.createFromPath(ICON_FILE).resize({ width: size, height: size });
   if (process.platform === 'darwin') img.setTemplateImage(true);
   return img;
 }
 
 function createAppIcon() {
-  const s = 256, cx = s/2, cy = s/2, r = cx - 8;
-  const rgba = Buffer.alloc(s * s * 4, 0);
-  for (let y = 0; y < s; y++)
-    for (let x = 0; x < s; x++) {
-      const d = Math.hypot(x - cx + 0.5, y - cy + 0.5), i = (y * s + x) * 4;
-      if (d <= r) {
-        rgba[i]=0x16; rgba[i+1]=0x77; rgba[i+2]=0xff; rgba[i+3]=255;
-      } else if (d <= r+2) {
-        const a = Math.round(Math.max(0,Math.min(255,(1-(d-r))*255)));
-        rgba[i]=0x16; rgba[i+1]=0x77; rgba[i+2]=0xff; rgba[i+3]=a;
-      }
-    }
-  const png = makeIcon(s, s, rgba);
-  return nativeImage.createFromBuffer(png, { width: s, height: s });
+  return nativeImage.createFromPath(ICON_FILE);
 }
 
 // ═══════════════════════════════════════════════════
-//  AES Encryption with Salt
+//  Local secret encryption
 // ═══════════════════════════════════════════════════
 
-function getSalt() {
+function readJsonFile(file, fallback) {
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-      if (cfg.salt) return cfg.salt;
-    }
+    if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf-8'));
   } catch (_) {}
-  return '';
+  return fallback;
+}
+
+function normalizeData(data) {
+  return {
+    version: 1,
+    keys: Array.isArray(data?.keys) ? data.keys : [],
+    config: {
+      salt: typeof data?.config?.salt === 'string' ? data.config.salt : '',
+      hideDock: typeof data?.config?.hideDock === 'boolean' ? data.config.hideDock : true,
+    },
+    avatarData: typeof data?.avatarData === 'string' ? data.avatarData : null,
+  };
+}
+
+function getAppData() {
+  if (fs.existsSync(DATA_FILE)) {
+    return normalizeData(readJsonFile(DATA_FILE, {}));
+  }
+
+  const initialData = normalizeData({});
+  saveAppData(initialData);
+  return initialData;
+}
+
+function saveAppData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(normalizeData(data), null, 2), 'utf-8');
+}
+
+function updateAppData(updater) {
+  const data = getAppData();
+  updater(data);
+  saveAppData(data);
+  return data;
+}
+
+function getSalt() {
+  return getAppData().config.salt;
 }
 
 function saveConfig(config) {
-  const existing = {};
-  try {
-    if (fs.existsSync(CONFIG_FILE))
-      Object.assign(existing, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')));
-  } catch (_) {}
-  Object.assign(existing, config);
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2), 'utf-8');
+  updateAppData((data) => {
+    Object.assign(data.config, config);
+  });
 }
 
 function getDockHide() {
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-      if (typeof cfg.hideDock === 'boolean') return cfg.hideDock;
-    }
-  } catch (_) {}
-  return true; // 默认隐藏
+  return getAppData().config.hideDock;
 }
 
 function encryptSecret(plaintext, salt) {
+  if (safeStorage?.isEncryptionAvailable()) {
+    return JSON.stringify({
+      v: 2,
+      alg: 'safeStorage',
+      data: safeStorage.encryptString(plaintext).toString('base64'),
+    });
+  }
+  if (!salt) throw new Error('系统加密不可用，请先启用系统钥匙串/凭据存储');
   const key = crypto.scryptSync(salt, 'totp-salt', 32);
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -162,27 +124,50 @@ function decryptSecret(stored, salt) {
   return decrypted;
 }
 
+function decodeStoredSecret(encoded, salt = getSalt()) {
+  try {
+    const parsed = JSON.parse(encoded);
+    if (parsed?.v === 2 && parsed.alg === 'safeStorage') {
+      if (!safeStorage?.isEncryptionAvailable()) return '';
+      return safeStorage.decryptString(Buffer.from(parsed.data, 'base64'));
+    }
+    if (parsed?.iv && parsed?.data && parsed?.tag && salt) return decryptSecret(encoded, salt);
+  } catch (_) {
+    try { return Buffer.from(encoded, 'base64').toString('utf-8'); } catch (__) { return ''; }
+  }
+  if (salt) {
+    try { return decryptSecret(encoded, salt); } catch (_) {}
+  }
+  return '';
+}
+
+function publicKey(key) {
+  return {
+    id: key.id,
+    name: key.name,
+    createdAt: key.createdAt,
+  };
+}
+
 // ═══════════════════════════════════════════════════
 //  Store
 // ═══════════════════════════════════════════════════
 
 function getStore() {
-  try {
-    if (fs.existsSync(KEYS_FILE))
-      return JSON.parse(fs.readFileSync(KEYS_FILE, 'utf-8'));
-  } catch (_) {}
-  return { keys: [] };
+  return { keys: getAppData().keys };
 }
 
 function saveStore(store) {
-  fs.writeFileSync(KEYS_FILE, JSON.stringify(store, null, 2), 'utf-8');
+  updateAppData((data) => {
+    data.keys = Array.isArray(store.keys) ? store.keys : [];
+  });
 }
 
 function addKey(name, secret) {
   const store = getStore();
   const id = crypto.randomUUID();
   const salt = getSalt();
-  const encoded = salt ? encryptSecret(secret, salt) : Buffer.from(secret).toString('base64');
+  const encoded = encryptSecret(secret, salt);
   store.keys.push({
     id,
     name: name.trim(),
@@ -204,11 +189,35 @@ function getAllKeys() {
 }
 
 function decodeSecret(encoded) {
-  const salt = getSalt();
-  if (!salt) {
-    try { return Buffer.from(encoded, 'base64').toString('utf-8'); } catch (_) { return ''; }
+  return decodeStoredSecret(encoded);
+}
+
+function getPublicKeys() {
+  return getAllKeys().map(publicKey);
+}
+
+function migrateSecretsToSafeStorage() {
+  if (!safeStorage?.isEncryptionAvailable()) return;
+  const store = getStore();
+  let changed = false;
+  for (const key of store.keys) {
+    const secret = decodeStoredSecret(key.secret);
+    if (!secret) continue;
+    try {
+      const parsed = JSON.parse(key.secret);
+      if (parsed?.v === 2 && parsed.alg === 'safeStorage') continue;
+    } catch (_) {}
+    key.secret = encryptSecret(secret, getSalt());
+    changed = true;
   }
-  try { return decryptSecret(encoded, salt); } catch (_) { return ''; }
+  if (changed) saveStore(store);
+}
+
+function getSecurityStatus() {
+  return {
+    encryptionAvailable: !!safeStorage?.isEncryptionAvailable(),
+    encryptedWithSystemStorage: !!safeStorage?.isEncryptionAvailable(),
+  };
 }
 
 // ═══════════════════════════════════════════════════
@@ -247,17 +256,29 @@ function computeCodes(keys, timeStep = 30) {
   const counter = Math.floor(now / timeStep);
   const remaining = timeStep - (now % timeStep);
   return keys.map(key => {
-    const secret = decodeSecret(key.secret);
-    if (!secret) return { id: key.id, name: key.name, current: '------', remaining, error: true };
-    return {
-      id: key.id,
-      name: key.name,
-      current: generateTOTP(secret, counter),
-      past: generateTOTP(secret, counter - 1),
-      next: generateTOTP(secret, counter + 1),
-      remaining,
-    };
+    try {
+      const secret = decodeSecret(key.secret);
+      if (!secret) return { id: key.id, name: key.name, current: '------', remaining, error: true };
+      return {
+        id: key.id,
+        name: key.name,
+        current: generateTOTP(secret, counter),
+        past: generateTOTP(secret, counter - 1),
+        next: generateTOTP(secret, counter + 1),
+        remaining,
+      };
+    } catch (_) {
+      return { id: key.id, name: key.name, current: '------', remaining, error: true };
+    }
   });
+}
+
+function getOtpAuthUrl(id) {
+  const key = getAllKeys().find(item => item.id === id);
+  if (!key) throw new Error('密钥不存在');
+  const secret = decodeSecret(key.secret);
+  if (!secret) throw new Error('密钥无法解密');
+  return `otpauth://totp/${encodeURIComponent(key.name)}?secret=${encodeURIComponent(secret)}&issuer=2FA-App`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -268,8 +289,11 @@ let mainWindow = null;
 let popupWindow = null;
 let tray = null;
 
-function resolveURL(file) {
-  return isDev ? `${DEV_URL}/${file}` : distFile(file);
+function loadAppWindow(win, file) {
+  if (isDev) {
+    return win.loadURL(`${DEV_URL}/${file}`);
+  }
+  return win.loadFile(distFile(file));
 }
 
 function createMainWindow() {
@@ -285,16 +309,22 @@ function createMainWindow() {
     minWidth: 360,
     minHeight: 480,
     frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
     title: 'OTP.2FA',
+    icon: createAppIcon(),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
   });
 
-  mainWindow.loadURL(resolveURL('index.html'));
+  loadAppWindow(mainWindow, 'index.html');
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -316,7 +346,10 @@ function createPopupWindow(bounds) {
     x: bounds.x,
     y: bounds.y,
     frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
     resizable: false,
+    icon: createAppIcon(),
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
@@ -324,26 +357,19 @@ function createPopupWindow(bounds) {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
   });
 
   popupWindow = win;
-  win.loadURL(resolveURL('popup.html'));
+  loadAppWindow(win, 'popup.html');
 
   win.once('ready-to-show', () => {
     if (!win || win.isDestroyed()) return;
     win.show();
     win.focus();
-    setTimeout(async () => {
-      try {
-        const h = await win.webContents.executeJavaScript(
-          'document.documentElement.scrollHeight'
-        );
-        if (h > 40 && !win.isDestroyed()) {
-          win.setSize(300, Math.min(Math.max(h, 120), 420));
-        }
-      } catch (_) {}
-    }, 100);
   });
 
   win.on('blur', () => {
@@ -399,7 +425,7 @@ function createTray() {
 //  IPC Handlers
 // ═══════════════════════════════════════════════════
 
-ipcMain.handle('keys:list', () => getAllKeys());
+ipcMain.handle('keys:list', () => getPublicKeys());
 
 ipcMain.handle('keys:add', (_, name, secret) => {
   if (!name || !name.trim()) throw new Error('请输入名称');
@@ -415,39 +441,18 @@ ipcMain.handle('codes:get', () => computeCodes(getAllKeys()));
 
 ipcMain.handle('codes:top', () => computeCodes(getAllKeys().slice(0, 3)));
 
-ipcMain.handle('secret:decode', (_, encoded) => decodeSecret(encoded));
+ipcMain.handle('qr:get', (_, id) => createQrDataUrl(getOtpAuthUrl(id)));
 
-ipcMain.handle('salt:get', () => getSalt());
-
-ipcMain.handle('salt:save', (_, salt) => {
-  if (!/^[a-f0-9]{32,}$/i.test(salt)) throw new Error('Salt 格式无效 (需 32 位以上十六进制)');
-  saveConfig({ salt });
-  const store = getStore();
-  for (const key of store.keys) {
-    try {
-      // Try decrypting with old salt first, fall back to base64
-      let oldSecret;
-      try { oldSecret = decryptSecret(key.secret, salt); }
-      catch (_) { oldSecret = Buffer.from(key.secret, 'base64').toString('utf-8'); }
-      key.secret = encryptSecret(oldSecret, salt);
-    } catch (_) { /* skip */ }
-  }
-  saveStore(store);
-});
+ipcMain.handle('security:status', () => getSecurityStatus());
 
 ipcMain.handle('avatar:save', (_, dataUrl) => {
-  const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-  fs.writeFileSync(AVATAR_FILE, Buffer.from(base64, 'base64'));
+  updateAppData((data) => {
+    data.avatarData = typeof dataUrl === 'string' ? dataUrl : null;
+  });
 });
 
 ipcMain.handle('avatar:get', () => {
-  try {
-    if (fs.existsSync(AVATAR_FILE)) {
-      const data = fs.readFileSync(AVATAR_FILE);
-      return `data:image/png;base64,${data.toString('base64')}`;
-    }
-  } catch (_) {}
-  return null;
+  return getAppData().avatarData;
 });
 
 ipcMain.handle('main:open', () => createMainWindow());
@@ -476,8 +481,9 @@ app.isQuitting = false;
 app.on('before-quit', () => { app.isQuitting = true; });
 
 app.whenReady().then(() => {
+  migrateSecretsToSafeStorage();
   if (process.platform === 'darwin') {
-    app.setActivationPolicy('accessory');
+    app.setActivationPolicy(getDockHide() ? 'accessory' : 'regular');
   }
   Menu.setApplicationMenu(null);
   createTray();

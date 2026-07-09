@@ -1,484 +1,171 @@
+<script setup>
+import { onMounted, shallowRef, watch } from 'vue';
+import AppTitlebar from './components/app/AppTitlebar.vue';
+import InfoModal from './components/app/InfoModal.vue';
+import SettingsModal from './components/settings/SettingsModal.vue';
+import AddKeyModal from './components/totp/AddKeyModal.vue';
+import KeyList from './components/totp/KeyList.vue';
+import { useSecuritySettings } from './composables/useSecuritySettings';
+import { useToast } from './composables/useToast';
+import { useTotpKeys } from './composables/useTotpKeys';
+import { electronApi } from './services/electronApi';
+
+const showAddKey = shallowRef(false);
+const showSettings = shallowRef(false);
+const showAbout = shallowRef(false);
+const showFeedback = shallowRef(false);
+const addKeyError = shallowRef('');
+const avatarData = shallowRef('');
+
+const { keys, codes, addKey, removeKey } = useTotpKeys();
+const { message: toastMessage, visible: toastVisible, showToast } = useToast();
+const {
+  encryptionAvailable,
+  hideDock,
+  loadSettings,
+  setDockHidden,
+} = useSecuritySettings();
+
+watch(showSettings, isOpen => {
+  if (isOpen) {
+    loadSettings().catch(() => {});
+  }
+});
+
+onMounted(() => {
+  electronApi.getAvatar()
+    .then(savedAvatar => {
+      avatarData.value = savedAvatar || '';
+    })
+    .catch(() => {});
+});
+
+async function handleAddKey(payload) {
+  addKeyError.value = '';
+  try {
+    await addKey(payload);
+    showAddKey.value = false;
+  } catch (error) {
+    addKeyError.value = error.message || '添加失败';
+  }
+}
+
+async function handleRemoveKey(id) {
+  try {
+    await removeKey(id);
+  } catch (_) {}
+}
+
+async function handleDockUpdate(nextValue) {
+  try {
+    await setDockHidden(nextValue);
+  } catch (_) {}
+}
+
+function openFeedbackLink() {
+  electronApi.openMainWindow().catch(() => {});
+}
+
+function minimizeWindow() {
+  electronApi.minimizeWindow().catch(() => {});
+}
+
+function closeWindow() {
+  electronApi.closeWindow().catch(() => {});
+}
+</script>
+
 <template>
   <div class="app">
-    <div class="titlebar">
-      <div class="titlebar-drag">
-        <div class="brand-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-          </svg>
-        </div>
-        <span class="badge">{{ keys.length }} 个密钥</span>
-        <div class="header-actions">
-          <div class="menu-wrapper">
-            <button class="header-btn" title="更多" @click="toggleMenu">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="1"></circle>
-                <circle cx="19" cy="12" r="1"></circle>
-                <circle cx="5" cy="12" r="1"></circle>
-              </svg>
-            </button>
-            <div v-if="menuOpen" class="dropdown" @click.self="menuOpen = false">
-              <div class="dropdown-item" @click="openAbout">关于</div>
-              <div class="dropdown-item" @click="openFeedback">反馈</div>
-            </div>
-          </div>
-          <button class="header-btn" title="设置" @click="showSettings = true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-          </button>
-          <button class="avatar-btn disabled" title="账号 (开发中)" @click="showToast('登录功能开发中')">
-            <template v-if="avatarData">
-              <img :src="avatarData" alt="avatar" class="avatar-thumb" />
-            </template>
-            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div class="titlebar-controls">
-        <button class="ctl-btn" @click="minimizeWin" title="最小化">
-          <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
-        </button>
-        <button class="ctl-btn ctl-close" @click="closeWin" title="关闭">
-          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5"/></svg>
-        </button>
-      </div>
-    </div>
+    <AppTitlebar
+      :key-count="keys.length"
+      :avatar-data="avatarData"
+      @account-click="showToast('登录功能开发中')"
+      @close-window="closeWindow"
+      @minimize-window="minimizeWindow"
+      @open-about="showAbout = true"
+      @open-feedback="showFeedback = true"
+      @open-settings="showSettings = true"
+    />
 
-    <!-- Key List -->
-    <div class="body-scroll">
-      <div v-if="keys.length === 0" class="empty">
-        <div class="empty-icon">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-          </svg>
-        </div>
-        <p>暂无密钥，点击右下角 + 添加</p>
-      </div>
-      <div v-else class="card-list">
-        <KeyCard
-          v-for="code in codes"
-          :key="code.id"
-          :code="code"
-          @remove="removeKey(code.id)"
-        />
-      </div>
-    </div>
+    <KeyList
+      :codes="codes"
+      :key-count="keys.length"
+      @remove="handleRemoveKey"
+    />
 
-    <!-- FAB -->
     <button class="fab" @click="showAddKey = true">+</button>
 
-    <!-- Modal: Add Key -->
-    <Modal v-if="showAddKey" title="添加密钥" @close="showAddKey = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5M20 7l-3-3"></path>
-        </svg>
-      </template>
-      <label>名称</label>
-      <input v-model="addName" placeholder="例如: GitHub" @keydown.enter="$refs.addSecret?.focus()" />
-      <label>密钥 (Base32)</label>
-      <input ref="addSecret" v-model="addSecret" placeholder="例如: 5NCZCPKP66WZQYNT" @keydown.enter="confirmAdd" />
-      <div v-if="addError" class="err">{{ addError }}</div>
-      <div class="modal-actions">
-        <button class="btn-cancel" @click="showAddKey = false">取消</button>
-        <button class="btn-confirm" @click="confirmAdd">确认</button>
-      </div>
-    </Modal>
+    <AddKeyModal
+      v-if="showAddKey"
+      :error="addKeyError"
+      @close="showAddKey = false"
+      @submit="handleAddKey"
+    />
 
-    <!-- Modal: Settings -->
-    <Modal v-if="showSettings" title="设置" @close="showSettings = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      </template>
-      <label>本地加密盐 (Salt)</label>
-      <div class="salt-row">
-        <textarea v-model="saltValue" rows="2" placeholder="32位以上十六进制字符串"></textarea>
-        <button class="btn-gen" @click="generateSalt" title="随机生成">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-          </svg>
-        </button>
-      </div>
-      <div class="hint">
-        <strong>盐的作用：</strong>密钥用 AES-256-GCM 加密后保存。即使文件泄露，没有 salt 也无法还原。<br />
-        <strong>⚠️ 盐仅保存在本机，不会上传。</strong> 更换设备时需手动迁移。
-      </div>
+    <SettingsModal
+      v-if="showSettings"
+      :encryption-available="encryptionAvailable"
+      :hide-dock="hideDock"
+      @close="showSettings = false"
+      @update:hide-dock="handleDockUpdate"
+    />
 
-      <div class="toggle-row">
-        <span class="toggle-label">隐藏 Dock 图标</span>
-        <label class="toggle-switch">
-          <input type="checkbox" v-model="hideDock" @change="toggleDock" />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
+    <InfoModal
+      v-if="showAbout"
+      kind="about"
+      @close="showAbout = false"
+    />
 
-      <div v-if="saltError" class="err">{{ saltError }}</div>
-      <div class="modal-actions">
-        <button class="btn-cancel" @click="showSettings = false">取消</button>
-        <button class="btn-confirm" @click="confirmSalt">保存</button>
-      </div>
-    </Modal>
-
-    <!-- Modal: Login (not logged) -->
-    <Modal v-if="showLogin && !loggedIn" title="账号" @close="showLogin = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
-        </svg>
-      </template>
-      <label>邮箱</label>
-      <input v-model="loginEmail" placeholder="you@example.com" />
-      <label>密码</label>
-      <input type="password" v-model="loginPass" placeholder="输入密码" @keydown.enter="mockLogin" />
-      <div class="hint">登录后可跨设备同步密钥。本地盐值不上传。</div>
-      <div class="modal-actions">
-        <button class="btn-cancel" @click="showLogin = false">取消</button>
-        <button class="btn-confirm" @click="mockLogin">登录</button>
-      </div>
-      <div class="modal-footer-link" @click="showRegister = true; showLogin = false">还没有账号？注册</div>
-    </Modal>
-
-    <!-- Modal: Login (logged in) -->
-    <Modal v-if="showLogin && loggedIn" title="账号" @close="showLogin = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
-        </svg>
-      </template>
-      <div class="avatar-section">
-        <div class="avatar-edit" @click="triggerAvatarInput">
-          <div class="avatar-img"><img v-if="avatarData" :src="avatarData" alt="" /></div>
-          <div class="avatar-overlay">📷</div>
-        </div>
-        <input ref="avatarInput" type="file" accept="image/*" style="display:none" @change="onAvatarChange" />
-        <div class="avatar-hint">点击头像更换图片</div>
-        <div class="avatar-email">{{ loginEmail || 'user@example.com' }}</div>
-        <div class="avatar-status">已登录 · 同步已开启</div>
-        <div class="avatar-links">
-          <span @click="showChangePass = true; showLogin = false">修改密码</span>
-          <span class="sep">|</span>
-          <span class="logout" @click="mockLogout">退出登录</span>
-        </div>
-      </div>
-    </Modal>
-
-    <!-- Modal: Register -->
-    <Modal v-if="showRegister" title="注册" @close="showRegister = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="8.5" cy="7" r="4"></circle>
-          <line x1="20" y1="8" x2="20" y2="14"></line>
-          <line x1="23" y1="11" x2="17" y2="11"></line>
-        </svg>
-      </template>
-      <label>邮箱</label>
-      <input v-model="regEmail" placeholder="you@example.com" />
-      <label>密码</label>
-      <input type="password" v-model="regPass" placeholder="至少 8 位" />
-      <label>确认密码</label>
-      <input type="password" v-model="regPass2" placeholder="再次输入" @keydown.enter="mockRegister" />
-      <div class="hint">注册后跨设备同步密钥。本地盐始终不上传。</div>
-      <div class="modal-actions">
-        <button class="btn-cancel" @click="showRegister = false">取消</button>
-        <button class="btn-confirm" @click="mockRegister">注册</button>
-      </div>
-      <div class="modal-footer-link" @click="showLogin = true; showRegister = false">已有账号？登录</div>
-    </Modal>
-
-    <!-- Modal: Change Password -->
-    <Modal v-if="showChangePass" title="修改密码" @close="showChangePass = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-        </svg>
-      </template>
-      <label>当前密码</label>
-      <input type="password" v-model="changeOld" placeholder="当前密码" />
-      <label>新密码</label>
-      <input type="password" v-model="changeNew" placeholder="至少 8 位新密码" />
-      <label>确认新密码</label>
-      <input type="password" v-model="changeNew2" placeholder="再次输入" @keydown.enter="showChangePass = false" />
-      <div class="modal-actions">
-        <button class="btn-cancel" @click="showChangePass = false">取消</button>
-        <button class="btn-confirm" @click="showChangePass = false">保存</button>
-      </div>
-    </Modal>
-
-    <!-- About -->
-    <Modal v-if="showAbout" title="关于" @close="showAbout = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="16" x2="12" y2="12"></line>
-          <line x1="12" y1="8" x2="12.01" y2="8"></line>
-        </svg>
-      </template>
-      <div style="text-align:center; padding:8px 0;">
-        <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">OTP.2FA</div>
-        <div style="font-size:0.8rem; color:#8c8c8c; margin-bottom:12px;">版本 1.0.0</div>
-        <div style="font-size:0.78rem; color:#595959; line-height:1.6;">
-          基于时间的一次性密码 (TOTP) 桌面工具<br>
-          使用 Electron + Vue 3 构建<br>
-          支持 Windows / macOS / Linux
-        </div>
-      </div>
-    </Modal>
-
-    <!-- Feedback -->
-    <Modal v-if="showFeedback" title="反馈" @close="showFeedback = false">
-      <template #icon>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-        </svg>
-      </template>
-      <div style="text-align:center; padding:8px 0;">
-        <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">反馈与建议</div>
-        <div style="font-size:0.8rem; color:#8c8c8c; margin-bottom:14px; line-height:1.6;">
-          如果你遇到问题或有功能建议，请通过以下方式联系我们
-        </div>
-        <div style="font-size:0.82rem; color:#1677ff; margin-bottom:6px; cursor:pointer;" onclick="window.api?.openMain?.()">
-          GitHub Issues
-        </div>
-      </div>
-    </Modal>
+    <InfoModal
+      v-if="showFeedback"
+      kind="feedback"
+      @close="showFeedback = false"
+      @open-feedback-link="openFeedbackLink"
+    />
   </div>
 
   <transition name="toast-fade">
-    <div v-if="toastVisible" class="toast">{{ toastMsg }}</div>
+    <div v-if="toastVisible" class="toast">{{ toastMessage }}</div>
   </transition>
 </template>
-
-<script>
-import KeyCard from './components/KeyCard.vue'
-import Modal from './components/Modal.vue'
-
-export default {
-  components: { KeyCard, Modal },
-  data() {
-    return {
-      keys: [],
-      codes: [],
-      timer: null,
-
-      // Add key
-      showAddKey: false,
-      addName: '',
-      addSecret: '',
-      addError: '',
-
-      // Settings
-      showSettings: false,
-      saltValue: '',
-      saltError: '',
-      hideDock: true,
-      menuOpen: false,
-      toastMsg: '',
-      toastVisible: false,
-      _toastTimer: null,
-
-      // Login / Account
-      showLogin: false,
-      loggedIn: false,
-      loginEmail: '',
-      loginPass: '',
-      avatarData: null,
-
-      // Register
-      showRegister: false,
-      regEmail: '',
-      regPass: '',
-      regPass2: '',
-
-      // Change password
-      showChangePass: false,
-      changeOld: '',
-      changeNew: '',
-      changeNew2: '',
-      showAbout: false,
-      showFeedback: false,
-    }
-  },
-
-  async mounted() {
-    await this.loadData()
-    this.startTimer()
-
-    // Load avatar
-    try {
-      const av = await window.api.getAvatar()
-      if (av) this.avatarData = av
-    } catch (_) {}
-  },
-
-  beforeUnmount() {
-    if (this.timer) clearInterval(this.timer)
-  },
-
-  methods: {
-    minimizeWin() { window.api.minimize() },
-    closeWin() { window.api.close() },
-
-    showToast(msg) {
-      this.toastMsg = msg
-      this.toastVisible = true
-      clearTimeout(this._toastTimer)
-      this._toastTimer = setTimeout(() => { this.toastVisible = false }, 2000)
-    },
-
-    toggleMenu() {
-      this.menuOpen = !this.menuOpen
-      if (this.menuOpen) {
-        setTimeout(() => {
-          const close = (e) => { this.menuOpen = false; document.removeEventListener('click', close) }
-          document.addEventListener('click', close)
-        }, 0)
-      }
-    },
-
-    openAbout() {
-      this.menuOpen = false
-      this.showAbout = true
-    },
-
-    openFeedback() {
-      this.menuOpen = false
-      this.showFeedback = true
-    },
-
-    async loadData() {
-      try {
-        this.keys = await window.api.getKeys()
-        const allCodes = await window.api.getCodes()
-        this.codes = allCodes
-      } catch (_) {}
-    },
-
-    startTimer() {
-      this.timer = setInterval(async () => {
-        try {
-          this.codes = await window.api.getCodes()
-        } catch (_) {}
-      }, 1000)
-    },
-
-    async removeKey(id) {
-      await window.api.removeKey(id)
-      await this.loadData()
-    },
-
-    // Add key
-    async confirmAdd() {
-      this.addError = ''
-      if (!this.addName.trim()) { this.addError = '请输入名称'; return }
-      if (!this.addSecret.trim()) { this.addError = '请输入密钥'; return }
-      try {
-        await window.api.addKey(this.addName.trim(), this.addSecret.trim())
-        this.showAddKey = false
-        this.addName = ''
-        this.addSecret = ''
-        await this.loadData()
-      } catch (e) {
-        this.addError = e.message
-      }
-    },
-
-    // Salt
-    async confirmSalt() {
-      this.saltError = ''
-      if (!/^[a-f0-9]{32,}$/i.test(this.saltValue.trim())) {
-        this.saltError = 'Salt 需为 32 位以上十六进制字符 (0-9 a-f)'
-        return
-      }
-      try {
-        await window.api.saveSalt(this.saltValue.trim())
-        this.showSettings = false
-        await this.loadData()
-      } catch (e) {
-        this.saltError = e.message
-      }
-    },
-
-    async loadSalt() {
-      try {
-        this.saltValue = await window.api.getSalt()
-      } catch (_) {}
-    },
-
-    async toggleDock() {
-      try { await window.api.setDockHide(this.hideDock) } catch (_) {}
-    },
-
-    async loadDockPref() {
-      try { this.hideDock = await window.api.getDockHide() } catch (_) {}
-    },
-
-    generateSalt() {
-      let s = '';
-      for (let i = 0; i < 64; i++) s += '0123456789abcdef'[Math.floor(Math.random() * 16)];
-      this.saltValue = s;
-    },
-
-    // Avatar
-    triggerAvatarInput() {
-      this.$refs.avatarInput?.click()
-    },
-    async onAvatarChange(e) {
-      const file = e.target.files[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = async (ev) => {
-        this.avatarData = ev.target.result
-        try { await window.api.saveAvatar(ev.target.result) } catch (_) {}
-      }
-      reader.readAsDataURL(file)
-    },
-
-    // Mock auth
-    mockLogin() {
-      this.loggedIn = true
-      if (!this.loginEmail) this.loginEmail = 'user@example.com'
-    },
-    mockLogout() {
-      this.loggedIn = false
-      this.loginPass = ''
-    },
-    mockRegister() {
-      this.loggedIn = true
-      this.loginEmail = this.regEmail || 'user@example.com'
-      this.showRegister = false
-      this.showLogin = false
-    },
-  },
-
-  watch: {
-    showSettings(v) {
-      if (v) { this.loadSalt(); this.loadDockPref(); }
-    },
-  },
-}
-</script>
 
 <style>
 /* ═══════════════════════════════ Reset & Base */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+:root {
+  --app-bg-start: #eef5ff;
+  --app-bg-mid: #f7fbf7;
+  --app-bg-end: #fff7ef;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-bg-soft: rgba(255, 255, 255, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.68);
+  --glass-border-subtle: rgba(148, 163, 184, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --glass-shadow: 0 18px 46px rgba(31, 41, 55, 0.11), 0 3px 12px rgba(31, 41, 55, 0.06);
+  --glass-shadow-soft: 0 10px 28px rgba(31, 41, 55, 0.08), 0 1px 4px rgba(31, 41, 55, 0.05);
+  --text-primary: #1f2937;
+  --text-secondary: #64748b;
+  --primary: #1677ff;
+  --primary-soft: rgba(22, 119, 255, 0.1);
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+html,
+body,
+#app {
+  background: transparent;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  background: #f0f2f5;
-  color: #1a1a1a;
+  background:
+    linear-gradient(145deg, rgba(238,245,255,0.78) 0%, rgba(247,251,247,0.7) 48%, rgba(255,247,239,0.76) 100%);
+  color: var(--text-primary);
   user-select: none;
   overflow: hidden;
 }
@@ -488,14 +175,26 @@ body {
   flex-direction: column;
   height: 100vh;
   max-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.48), rgba(255,255,255,0.12));
+  backdrop-filter: blur(10px) saturate(118%);
+  -webkit-backdrop-filter: blur(10px) saturate(118%);
 }
 
 /* ─── Titlebar ─── */
 .titlebar {
+  position: relative;
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  overflow: visible;
+  z-index: 20;
   -webkit-app-region: drag;
+  background: var(--glass-bg-soft);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  border-bottom: 1px solid var(--glass-border-subtle);
+  box-shadow: var(--glass-highlight);
 }
 
 .titlebar-drag {
@@ -523,22 +222,24 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8c8c8c;
+  color: var(--text-secondary);
   border-radius: 6px;
   transition: background 0.15s;
 }
-.ctl-btn:hover { background: #e5e8eb; color: #595959; }
-.ctl-close:hover { background: #ff4d4f; color: #fff; }
+.ctl-btn:hover { background: rgba(255,255,255,0.58); color: var(--text-primary); }
+.ctl-close:hover { background: rgba(239,68,68,0.9); color: #fff; }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-left: auto;
+  -webkit-app-region: no-drag;
 }
 
 .menu-wrapper {
   position: relative;
+  -webkit-app-region: no-drag;
 }
 
 .dropdown {
@@ -547,13 +248,17 @@ body {
   left: 50%;
   transform: translateX(-50%);
   margin-top: 6px;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-  border: 1px solid #f0f0f0;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  border-radius: 8px;
+  box-shadow: var(--glass-shadow-soft), var(--glass-highlight);
+  border: 1px solid var(--glass-border);
   min-width: 100px;
-  z-index: 50;
+  z-index: 100;
   overflow: visible;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 .dropdown::before {
@@ -564,32 +269,34 @@ body {
   margin-left: -4px;
   width: 8px;
   height: 8px;
-  background: #fff;
-  border-left: 1px solid #f0f0f0;
-  border-top: 1px solid #f0f0f0;
+  background: rgba(255,255,255,0.82);
+  border-left: 1px solid var(--glass-border);
+  border-top: 1px solid var(--glass-border);
   transform: rotate(45deg);
 }
 
 .dropdown-item {
   padding: 9px 16px;
   font-size: 0.82rem;
-  color: #595959;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.12s;
+  -webkit-app-region: no-drag;
 }
 
 .dropdown-item:hover {
-  background: #f5f5f5;
-  color: #1677ff;
+  background: rgba(22,119,255,0.08);
+  color: var(--primary);
 }
 
 .dropdown-item + .dropdown-item {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--glass-border-subtle);
 }
 
 .brand-icon {
   width: 26px; height: 26px;
-  background: linear-gradient(135deg, #1677ff, #4096ff);
+  background: linear-gradient(135deg, rgba(22,119,255,0.92), rgba(64,150,255,0.82));
+  box-shadow: var(--glass-highlight), 0 8px 20px rgba(22,119,255,0.18);
   border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-size: 0.75rem; font-weight: 700;
@@ -604,31 +311,33 @@ body {
 }
 
 .badge {
-  font-size: 0.7rem; color: #8c8c8c;
-  background: #f5f5f5; padding: 2px 10px; border-radius: 10px;
+  font-size: 0.7rem; color: var(--text-secondary);
+  background: rgba(255,255,255,0.54); padding: 2px 10px; border-radius: 8px;
+  border: 1px solid var(--glass-border-subtle);
+  box-shadow: var(--glass-highlight);
 }
 
 .header-btn {
   width: 32px; height: 32px; border: none; background: transparent;
   border-radius: 8px; cursor: pointer; font-size: 1.1rem;
   display: flex; align-items: center; justify-content: center;
-  color: #8c8c8c; transition: all 0.15s;
+  color: var(--text-secondary); transition: all 0.15s;
   -webkit-app-region: no-drag;
 }
-.header-btn:hover { background: #e5e8eb; color: #595959; }
+.header-btn:hover { background: rgba(255,255,255,0.58); color: var(--text-primary); }
 
 .avatar-btn {
   width: 30px; height: 30px; border-radius: 50%;
   border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.8rem; color: #8c8c8c;
+  font-size: 0.8rem; color: var(--text-secondary);
   transition: all 0.15s; overflow: hidden; margin-left: 2px;
   background: none;
   -webkit-app-region: no-drag;
 }
-.avatar-btn:hover { color: #1677ff; background: rgba(22,119,255,0.06); }
+.avatar-btn:hover { color: var(--primary); background: var(--primary-soft); }
 .avatar-btn.disabled { opacity: 0.4; cursor: not-allowed; }
-.avatar-btn.disabled:hover { color: #8c8c8c; background: none; }
+.avatar-btn.disabled:hover { color: var(--text-secondary); background: none; }
 .avatar-btn.logged { }
 
 .avatar-thumb {
@@ -642,7 +351,7 @@ body {
   padding-bottom: 10px;
 }
 .body-scroll::-webkit-scrollbar { width: 4px; }
-.body-scroll::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 2px; }
+.body-scroll::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.25); border-radius: 2px; }
 
 .card-list {
   padding: 8px 16px 80px;
@@ -653,7 +362,16 @@ body {
 
 /* ═══════════════════════════════ Empty */
 .empty {
-  text-align: center; padding: 60px 20px; color: #bfbfbf;
+  text-align: center;
+  padding: 56px 20px;
+  margin: 10px 16px;
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  box-shadow: var(--glass-shadow-soft), var(--glass-highlight);
+  backdrop-filter: blur(16px) saturate(145%);
+  -webkit-backdrop-filter: blur(16px) saturate(145%);
 }
 .empty-icon { font-size: 2.6rem; margin-bottom: 10px; display: flex; justify-content: center; }
 .empty p { font-size: 0.85rem; }
@@ -664,62 +382,42 @@ body {
   bottom: 20px; right: 20px;
   width: 48px; height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1677ff, #4096ff);
-  border: none; color: #fff;
+  background: linear-gradient(135deg, rgba(22,119,255,0.9), rgba(64,150,255,0.78));
+  border: 1px solid rgba(255,255,255,0.46); color: #fff;
   font-size: 1.5rem; font-weight: 300;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(22,119,255,0.4);
+  box-shadow: 0 16px 34px rgba(22,119,255,0.26), var(--glass-highlight);
+  backdrop-filter: blur(14px) saturate(145%);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
   transition: all 0.2s;
   display: flex; align-items: center; justify-content: center;
   z-index: 5;
 }
-.fab:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(22,119,255,0.5); }
+.fab:hover { transform: scale(1.06); box-shadow: 0 18px 38px rgba(22,119,255,0.34), var(--glass-highlight); }
 
 /* ═══════════════════════════════ Modal overlay + glass */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.25);
-  backdrop-filter: blur(6px);
+  background: rgba(15,23,42,0.22);
+  backdrop-filter: blur(8px) saturate(120%);
   display: flex; align-items: center; justify-content: center;
   z-index: 100;
 }
 
 .modal-box {
   position: relative;
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 24px 22px 18px;
   width: 340px;
   max-width: 90vw;
   animation: modalIn 0.25s ease;
 
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.6);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
   overflow: hidden;
-}
-
-.modal-box::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 20px;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 18% 22%, rgba(255,255,255,0.35) 0px, transparent 4px),
-    radial-gradient(circle at 72% 15%, rgba(255,255,255,0.20) 0px, transparent 3px),
-    radial-gradient(circle at 85% 55%, rgba(255,255,255,0.25) 0px, transparent 5px),
-    radial-gradient(circle at 30% 70%, rgba(255,255,255,0.15) 0px, transparent 3px),
-    radial-gradient(circle at 40% 35%, rgba(255,255,255,0.30) 0px, transparent 2px),
-    radial-gradient(circle at 60% 75%, rgba(255,255,255,0.18) 0px, transparent 2px),
-    radial-gradient(circle at 12% 50%, rgba(255,255,255,0.22) 0px, transparent 2px),
-    radial-gradient(circle at 50% 88%, rgba(255,255,255,0.15) 0px, transparent 2px),
-    radial-gradient(circle at 78% 35%, rgba(255,255,255,0.20) 0px, transparent 2px),
-    radial-gradient(circle at 55% 45%, rgba(255,255,255,0.12) 0px, transparent 1px),
-    radial-gradient(circle at 90% 80%, rgba(255,255,255,0.18) 0px, transparent 2px),
-    linear-gradient(145deg, rgba(255,255,255,0.08) 0%, transparent 30%, transparent 70%, rgba(255,255,255,0.05) 100%);
-  z-index: -1;
 }
 
 @keyframes modalIn {
@@ -738,7 +436,7 @@ body {
 .modal-box label {
   display: block;
   font-size: 0.78rem; font-weight: 500;
-  color: #595959; margin-bottom: 4px;
+  color: var(--text-secondary); margin-bottom: 4px;
   position: relative;
   z-index: 1;
 }
@@ -746,8 +444,8 @@ body {
 .modal-box input, .modal-box textarea {
   width: 100%;
   padding: 9px 12px;
-  border: 1.5px solid #d9d9d9;
-  border-radius: 10px;
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 8px;
   font-size: 0.88rem;
   outline: none;
   margin-bottom: 14px;
@@ -755,7 +453,8 @@ body {
   font-family: inherit;
   position: relative;
   z-index: 1;
-  background: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.5);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
 }
 
 .modal-box textarea {
@@ -764,40 +463,37 @@ body {
   font-size: 0.82rem;
 }
 
-.salt-row {
-  position: relative;
-}
-
-.salt-row textarea {
-  width: 100%;
-}
-
-.btn-gen {
-  position: absolute;
-  right: 6px;
-  top: 6px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  color: #8c8c8c;
-  transition: color 0.15s;
+.security-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: rgba(255,255,255,0.48);
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  position: relative;
   z-index: 1;
 }
-.btn-gen:hover {
-  color: #1677ff;
+
+.security-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
 }
+.security-dot.ok { background: var(--success); }
+.security-dot.bad { background: var(--danger); }
 
 .modal-box input:focus, .modal-box textarea:focus {
-  border-color: #1677ff;
+  border-color: rgba(22,119,255,0.58);
   box-shadow: 0 0 0 3px rgba(22,119,255,0.1);
 }
 
 .modal-box .hint {
   font-size: 0.72rem;
-  color: #8c8c8c;
+  color: var(--text-secondary);
   margin-top: -8px;
   margin-bottom: 14px;
   line-height: 1.5;
@@ -805,10 +501,10 @@ body {
   z-index: 1;
 }
 
-.modal-box .hint strong { color: #595959; }
+.modal-box .hint strong { color: var(--text-primary); }
 .modal-box .err {
   font-size: 0.75rem;
-  color: #ff4d4f;
+  color: var(--danger);
   margin-top: -8px;
   margin-bottom: 12px;
   position: relative;
@@ -827,7 +523,7 @@ body {
 
 .toggle-label {
   font-size: 0.82rem;
-  color: #595959;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -843,8 +539,8 @@ body {
 .toggle-slider {
   position: absolute;
   inset: 0;
-  background: #d9d9d9;
-  border-radius: 11px;
+  background: rgba(100,116,139,0.22);
+  border-radius: 8px;
   transition: 0.2s;
 }
 
@@ -855,13 +551,13 @@ body {
   height: 18px;
   left: 2px;
   bottom: 2px;
-  background: #fff;
+  background: rgba(255,255,255,0.88);
   border-radius: 50%;
   transition: 0.2s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 
-.toggle-switch input:checked + .toggle-slider { background: #1677ff; }
+.toggle-switch input:checked + .toggle-slider { background: var(--primary); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
 
 .modal-actions {
@@ -871,27 +567,35 @@ body {
 }
 
 .modal-actions button {
-  flex: 1; padding: 9px; border-radius: 10px;
+  flex: 1; padding: 9px; border-radius: 8px;
   font-size: 0.85rem; font-weight: 500;
   cursor: pointer; border: none;
   transition: all 0.15s;
 }
 
-.btn-cancel { background: #f5f5f5; color: #595959; }
-.btn-cancel:hover { background: #ebebeb; }
-.btn-confirm { background: #1677ff; color: #fff; }
-.btn-confirm:hover { background: #4096ff; }
+.btn-cancel {
+  background: rgba(255,255,255,0.54);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border-subtle);
+}
+.btn-cancel:hover { background: rgba(255,255,255,0.72); color: var(--text-primary); }
+.btn-confirm {
+  background: linear-gradient(135deg, rgba(22,119,255,0.92), rgba(64,150,255,0.82));
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(22,119,255,0.18), var(--glass-highlight);
+}
+.btn-confirm:hover { background: linear-gradient(135deg, rgba(22,119,255,0.96), rgba(64,150,255,0.9)); }
 
 .modal-footer-link {
   text-align: center;
   margin-top: 12px;
   font-size: 0.75rem;
-  color: #8c8c8c;
+  color: var(--text-secondary);
   cursor: pointer;
   position: relative;
   z-index: 1;
 }
-.modal-footer-link:hover { color: #1677ff; }
+.modal-footer-link:hover { color: var(--primary); }
 
 /* Avatar section */
 .avatar-section { text-align: center; padding: 4px 0 12px; position: relative; z-index: 1; }
@@ -908,7 +612,7 @@ body {
   width: 60px; height: 60px;
   border-radius: 50%;
   overflow: hidden;
-  background: linear-gradient(135deg, #1677ff, #4096ff);
+  background: linear-gradient(135deg, rgba(22,119,255,0.92), rgba(64,150,255,0.82));
   display: flex; align-items: center; justify-content: center;
   transition: filter 0.2s;
 }
@@ -932,18 +636,57 @@ body {
 .avatar-edit:hover .avatar-overlay { opacity: 1; }
 .avatar-edit:hover .avatar-img { filter: brightness(0.85); }
 
-.avatar-hint { font-size: 0.72rem; color: #8c8c8c; margin-bottom: 8px; }
+.avatar-hint { font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 8px; }
 .avatar-email { font-weight: 600; font-size: 0.9rem; }
-.avatar-status { font-size: 0.75rem; color: #8c8c8c; margin-top: 2px; }
+.avatar-status { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
 
 .avatar-links {
   margin-top: 14px;
   display: flex; gap: 8px; justify-content: center;
   font-size: 0.75rem;
 }
-.avatar-links span { cursor: pointer; color: #1677ff; }
-.avatar-links .sep { color: #d9d9d9; cursor: default; }
-.avatar-links .logout { color: #ff4d4f; }
+.avatar-links span { cursor: pointer; color: var(--primary); }
+.avatar-links .sep { color: rgba(100,116,139,0.28); cursor: default; }
+.avatar-links .logout { color: var(--danger); }
+
+.info-panel {
+  text-align: center;
+  padding: 8px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.info-title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.info-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.info-paragraph {
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.info-copy {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.info-link {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+}
 
 /* Toast */
 .toast {
@@ -951,12 +694,15 @@ body {
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  background: #1677ff;
+  background: rgba(22,119,255,0.82);
+  backdrop-filter: blur(14px) saturate(145%);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  border: 1px solid rgba(255,255,255,0.42);
   color: #fff;
   padding: 8px 20px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 0.85rem;
-  box-shadow: 0 4px 16px rgba(22,119,255,0.3);
+  box-shadow: 0 14px 30px rgba(22,119,255,0.24), var(--glass-highlight);
   z-index: 200;
   white-space: nowrap;
 }
