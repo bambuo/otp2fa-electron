@@ -10,8 +10,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "NODE_ENV=production electron .",
-    "pack": "vite build && electron-builder --dir",
-    "dist": "vite build && electron-builder"
+    "icons": "node scripts/generate-icons.js",
+    "pack": "npm run icons && vite build && electron-builder --dir",
+    "dist": "npm run icons && vite build && electron-builder"
   },
   "dependencies": {
     "vue": "^3.5.0"
@@ -24,7 +25,7 @@
     "vite": "^6.2.0"
   },
   "build": {
-    "appId": "com.totp.desktop",
+    "appId": "com.otp2fa.desktop",
     "productName": "OTP.2FA",
     "directories": {
       "output": "release"
@@ -35,16 +36,37 @@
       "package.json"
     ],
     "mac": {
-      "target": ["dmg", "zip"],
-      "icon": "build/icon.icns"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        }
+      ],
       "icon": "build/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
-      "icon": "build/icon.png"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }
