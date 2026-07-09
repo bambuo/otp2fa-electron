@@ -16,6 +16,7 @@ export const electronApi = {
   getDockHide: () => getApi().getDockHide(),
   setDockHide: hide => getApi().setDockHide(hide),
   openMainWindow: () => getApi().openMain(),
+  openFeedbackIssues: () => getApi().openFeedbackIssues(),
   minimizeWindow: () => getApi().minimize(),
   closeWindow: () => getApi().close(),
 };

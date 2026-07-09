@@ -63,7 +63,7 @@ async function handleDockUpdate(nextValue) {
 }
 
 function openFeedbackLink() {
-  electronApi.openMainWindow().catch(() => {});
+  electronApi.openFeedbackIssues().catch(() => {});
 }
 
 function minimizeWindow() {

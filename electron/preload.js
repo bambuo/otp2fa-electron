@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   saveAvatar: (dataUrl) => ipcRenderer.invoke('avatar:save', dataUrl),
   getAvatar: () => ipcRenderer.invoke('avatar:get'),
   openMain: () => ipcRenderer.invoke('main:open'),
+  openFeedbackIssues: () => ipcRenderer.invoke('feedback:open-issues'),
   minimize: () => ipcRenderer.invoke('win:minimize'),
   close: () => ipcRenderer.invoke('win:close'),
   getDockHide: () => ipcRenderer.invoke('dock:get'),

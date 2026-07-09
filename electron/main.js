@@ -1,5 +1,5 @@
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, safeStorage,
+  app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, safeStorage, shell,
 } = require('electron');
 const os = require('os');
 const path = require('path');
@@ -13,6 +13,7 @@ const { createQrDataUrl } = require('./qr');
 
 const DEV_URL = 'http://localhost:5173';
 const isDev = process.env.NODE_ENV === 'development';
+const FEEDBACK_ISSUES_URL = 'https://github.com/bambuo/otp2fa-electron/issues';
 
 const DATA_DIR = path.join(os.homedir(), '.otp2fa');
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
@@ -456,6 +457,8 @@ ipcMain.handle('avatar:get', () => {
 });
 
 ipcMain.handle('main:open', () => createMainWindow());
+
+ipcMain.handle('feedback:open-issues', () => shell.openExternal(FEEDBACK_ISSUES_URL));
 
 ipcMain.handle('win:minimize', () => mainWindow?.minimize());
 ipcMain.handle('win:close', () => { if (mainWindow) mainWindow.close(); });
