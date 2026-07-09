@@ -208,10 +208,10 @@ onUnmounted(() => {
   transition: max-height 0.35s ease;
   display: flex; justify-content: center;
 }
-.card-qr.open { max-height: 150px; padding-top: 10px; }
+.card-qr.open { max-height: 270px; padding-top: 12px; }
 
 .qr-placeholder {
-  width: 120px; height: 120px;
+  width: 180px; height: 180px;
   background: rgba(255,255,255,0.48);
   border: 1px solid var(--glass-border-subtle);
   border-radius: 8px;
@@ -219,9 +219,8 @@ onUnmounted(() => {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
 }
 .qr-img {
-  width: 120px;
-  height: 120px;
-  border-radius: 8px;
+  width: 180px;
+  height: 180px;
 }
 .qr-loading,
 .qr-error {

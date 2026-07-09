@@ -279,7 +279,8 @@ function getOtpAuthUrl(id) {
   if (!key) throw new Error('密钥不存在');
   const secret = decodeSecret(key.secret);
   if (!secret) throw new Error('密钥无法解密');
-  return `otpauth://totp/${encodeURIComponent(key.name)}?secret=${encodeURIComponent(secret)}&issuer=2FA-App`;
+  const issuer = '2FA-App';
+  return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(key.name)}?secret=${encodeURIComponent(secret)}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -442,7 +443,7 @@ ipcMain.handle('codes:get', () => computeCodes(getAllKeys()));
 
 ipcMain.handle('codes:top', () => computeCodes(getAllKeys().slice(0, 3)));
 
-ipcMain.handle('qr:get', (_, id) => createQrDataUrl(getOtpAuthUrl(id)));
+ipcMain.handle('qr:get', async (_, id) => createQrDataUrl(getOtpAuthUrl(id)));
 
 ipcMain.handle('security:status', () => getSecurityStatus());
 
